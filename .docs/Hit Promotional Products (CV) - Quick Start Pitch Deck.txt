@@ -1,0 +1,266 @@
+ QuickStarts
+Fast, Focused, and Built to Execute
+© 2025 RevStar Consulting. All Rights Reserved.
+
+Today’s Agenda
+
+Welcome & Introductions
+Your Goals
+The Plan 
+QuickStart Review
+Next Steps
+© 2025 RevStar Consulting. All Rights Reserved.
+
+Your Goals
+
+Whether you're looking to operationalize GenAI or centralize your data for reporting and ML, our QuickStarts are designed to get real, working outcomes in a matter of weeks — not months.
+© 2025 RevStar Consulting. All Rights Reserved.
+Workstation Awareness
+
+Detect when stations go unattended and reduce idle time impact on throughput.
+
+
+01
+Production Accuracy
+
+Automated object counting and tracking to accurately monitor production output.
+
+Operator Simplicity
+
+Easy integration to tablet interface for workers to start/stop sessions and link activity to jobs.
+Real-Time 
+Visibility
+
+Enable alerts, dashboards and customer-facing insights into live production activity.
+
+02
+03
+04
+
+The Plan: POC 1
+This POC is focused on building the foundational infrastructure to stream video from tablets and perform real-time analysis in the cloud, creating a data lake of operational activity.
+
+Objectives:
+To establish a reliable, real-time video streaming pipeline from 10 Android tablets to the AWS cloud
+To perform server-side object detection for both worker presence and object counting
+To enable tablet-based controls for operators to start/stop counting sessions
+To detect and log operator presence/absence correlation with counting status
+To create a structured data lake storing all video frames, detection events, counts, and metadata
+Scope:
+Data Ingestion:
+Devices: 10 Samsung SM-X210 tablets will be configured to stream H.264 video.
+Protocol: Video will be streamed to AWS using Kinesis Video Streams.
+Tablet interface to start/stop counting sessions
+Data Processing:
+Compute: An AWS Fargate container will run a GStreamer pipeline for each of the 10 video streams.
+Session management: Track when counting is active vs. stopped (manually or due to absence)
+Detection: The GStreamer pipeline will decode the video and run an object detection model to identify worker presence (or absence).
+Data Lake & Storage:
+Raw Data: Raw video frames and snapshots from detection events will be stored in Amazon S3.
+Detection Logs: Structured logs of detection events (starts, stops, counts, metadata) will be stored in Amazon DynamoDB.
+Querying: Data will be processed by a daily batch job (AWS Glue or Lambda) and indexed so it can be queried using Amazon Athena.
+User Interface:
+A simple web interface will be built using React and Amplify. It will show the online/offline status of each tablet, display real-time and historical detection counts, and allow a user to start and stop the video streams.
+
+Plan & Deliverables:
+A functioning system with 10 active and stable video streams from the tablets.
+A demonstrated capability for real-time presence detection on all 10 streams.
+Tablet interface allowing operators to start/stop counting sessions
+A basic monitoring dashboard with the ability to export analytics data via Amazon Athena.
+
+The Plan: POC 2
+This POC builds directly on the detection events from PoC #1 to create a comprehensive data orchestration system that integrates with your existing operational platform.
+Objectives:
+To orchestrate and process all detection events from PoC #1 into actionable business notifications
+To establish reliable API integration with existings platform for real-time operational alerts
+To implement structured data storage optimized for both real-time access and historical analysis
+To provide a simple AI-powered interface for managers to query stored operational data
+Scope:
+Data Orchestration:
+AWS EventBridge to capture all detection events from PoC #1
+Fargate Tasks to process and transform events into business logic
+SQS/SNS for reliable message delivery and retry mechanisms
+Data Storage Architecture:
+DynamoDB for real-time event logs and session state
+Amazon Timestream for time-series data (presence duration, patterns)
+S3 with lifecycle policies for long-term snapshot archival
+Data partitioning strategy for efficient queries
+API Integration:
+REST API endpoints for your existing platform
+Webhooks for: Worker session start/stop, Absence alerts (>5 min), Daily summary statistics
+API Gateway with authentication and rate limiting
+Lightweight AI Features:
+Simple Bedrock integration for natural language queries
+Pre-built query templates for common questions
+Basic dashboard showing key metrics without requiring AI
+Plan & Deliverables:
+Fully functional data orchestration pipeline handling 10 concurrent video streams
+API integration sending real-time notifications to your existing platform
+Demonstrated data storage with optimized query performance
+Simple AI assistant for basic operational queries
+
+
+
+© 2025 RevStar Consulting. All Rights Reserved.
+Decision Criteria
+Companies choose RevStar for:
+Real-world experience in AI, Computer Vision,  data, and app modernization
+Delivery capacity — not just advisory
+Structured scope, baked-in DevOps, and no ambiguity
+Proven AWS-native architectures
+3
+4
+2
+1
+
+QuickStart Options
+© 2025 RevStar Consulting. All Rights Reserved.
+
+© 2025 RevStar Consulting. All Rights Reserved.
+Data Lake QuickStart: POC 1
+Deploy a Secure, Scalable GenAI API
+Deliverables:
+Cloud-native video data lake (raw frames + detection snapshots in S3)
+Ingestion from 10 Android tablet video streams (H.264 via Kinesis/RTSP)
+Real-time object detection pipeline (OpenVINO on Fargate)
+React + Amplify dashboard with stream controls
+
+  		Outcomes:
+Production-ready video ingestion infrastructure
+Real-time worker presence monitoring with sub-second latency
+
+Timeline: 4 Weeks
+SoW Cost: $23,000
+ AWS PoC Funding: $23,000
+👉  Net Investment: $0
+
+© 2025 RevStar Consulting. All Rights Reserved.
+Data Lake QuickStart: POC 1 - Architecture
+Developed on a secure cloud-native architecture on AWS, key benefits include: 
+
+Integration: Easy integration
+Scalability: Easily scale resources to handle varying workloads
+Flexibility: Supports diverse programming languages, OS, databases, and tools
+Security: Robust security measures protect data and applications
+Cost-effectiveness: Pay-as-you-go model reduces infrastructure costs
+
+Note: this base architecture could be expanded upon in our initial phase of the project. 
+
+Click here to view your cloud estimate
+
+© 2025 RevStar Consulting. All Rights Reserved.
+AI QuickStart: POC 2
+Deploy a Secure, Scalable GenAI API
+Deliverables:
+Real-time data orchestration pipeline (EventBridge + Fargate)
+API integration for start/stop and absence notifications
+Optimized data storage (DynamoDB + Timestream + S3)
+Webhook delivery to existing platform
+Simple AI assistant for operational queries
+
+
+  		Outcomes:
+Automated session tracking integrated with existing systems
+Real-time absence alerts sent to platform API
+Structured data ready for analytics and reporting
+Reliable event delivery with retry mechanisms
+Basic natural language access to operational metrics
+
+Timeline: 4 Weeks
+SoW Cost: $18,000
+ AWS PoC Funding: $18,000
+👉  Net Investment: $0
+
+© 2025 RevStar Consulting. All Rights Reserved.
+AI QuickStart: POC 2 - Architecture
+Developed on a secure cloud-native architecture on AWS, key benefits include: 
+
+Integration: Easy integration
+Scalability: Easily scale resources to handle varying workloads
+Flexibility: Supports diverse programming languages, OS, databases, and tools
+Security: Robust security measures protect data and applications
+Cost-effectiveness: Pay-as-you-go model reduces infrastructure costs
+
+Note: this base architecture could be expanded upon in our initial phase of the project.
+
+Click here to view your cloud estimate
+
+Delivery Process
+© 2022 RevStar Consulting. All Rights Reserved.
+
+Our Approach
+We move fast without cutting corners:
+© 2025 RevStar Consulting. All Rights Reserved.
+Dedicated AWS-certified team
+Infrastructure-as-Code templates for repeatability
+
+Transparent delivery model with weekly checkpoints
+Full handoff + post-engagement support included
+
+Our QuickStart Delivery Process
+RevStar QuickStarts are designed to deliver real, working outcomes in just four weeks. To ensure speed without sacrificing quality, we follow a structured, time-boxed delivery model with clear milestones and ownership at every step.
+© 2025 RevStar Consulting. All Rights Reserved.
+Project complete
+
+Final documentation delivered
+
+Conduct final handoff meeting
+
+Week 4:
+Final Testing,
+Handoff & Closeout
+Client Review & Refinement
+
+First full client demo completed
+
+Final tweaks and polish based on feedback
+
+Week 3:
+Client Review & Refinement
+All major features or components built
+
+Internal validation & refinement in progress
+Week 2:
+Core Implementation
+& Internal QA
+
+Environment provisioned
+
+Core architecture and first components deployed.
+
+Data/content ingestion begin
+
+Week 1:
+Environment Setup & Core Build Begins
+
+Week 0:
+Prep & Kickoff
+
+Internal alignment & Client kickoff 
+
+Environment and access confirmed
+
+Confirm data sources and requirements
+
+
+© 2025 RevStar Consulting. All Rights Reserved.
+Why RevStar?
+
+As an AWS Advanced Tier Partner, we specialize in fast-moving, cloud-native development for companies ready to execute. 
+Our QuickStarts are backed by real project leadership, strong DevOps, and scalable architectures.
+
+RevStar has done an
+amazing job building out our proprietary platform, the right way, from day one. 
+
+They have really hit the mark
+by managing the project and making sure development remained on budget and on time without sacrificing the software’s integrity.
+
+— Marvin Kloss, CEO, 
+
+What’s Next?
+Review & Approve Our Proposal
+Sign the Statement of Work
+Attend the Onboarding & Kick Off Call
+
+Better Experiences, Better Technology, Better Outcomes
+Built to Develop Better
