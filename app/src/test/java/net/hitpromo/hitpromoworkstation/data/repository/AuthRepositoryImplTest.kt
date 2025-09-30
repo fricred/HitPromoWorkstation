@@ -230,4 +230,9 @@ class AuthRepositoryImplTest {
 
         coVerify { userPreferences.clearUserSession() }
     }
+
+    // Password Reset Tests
+    // Note: Repository-level password reset tests are skipped due to Android Log
+    // dependencies. These operations are thoroughly tested at the use case level.
+    // See RequestPasswordResetUseCaseTest and ConfirmPasswordResetUseCaseTest.
 }

@@ -3,6 +3,7 @@ package net.hitpromo.hitpromoworkstation.domain.repository
 import kotlinx.coroutines.flow.Flow
 import net.hitpromo.hitpromoworkstation.domain.model.AuthResult
 import net.hitpromo.hitpromoworkstation.domain.model.AuthenticationState
+import net.hitpromo.hitpromoworkstation.domain.model.PasswordResetResult
 import net.hitpromo.hitpromoworkstation.domain.model.User
 
 /**
@@ -82,4 +83,32 @@ interface AuthRepository {
      * @param sessionId The session ID to cancel
      */
     fun cancelPasswordChangeSession(sessionId: String)
+
+    /**
+     * Request a password reset for the given username.
+     *
+     * Initiates the password reset flow by sending a verification code to the user's
+     * registered email or phone number.
+     *
+     * @param username The username for which to request a password reset
+     * @return PasswordResetResult indicating success (with delivery destination) or failure
+     */
+    suspend fun requestPasswordReset(username: String): PasswordResetResult
+
+    /**
+     * Confirm password reset with verification code and new password.
+     *
+     * Completes the password reset flow by validating the verification code and
+     * setting the new password.
+     *
+     * @param username The username for which to reset the password
+     * @param verificationCode The code received via email/SMS
+     * @param newPassword The new password to set
+     * @return PasswordResetResult indicating success or failure
+     */
+    suspend fun confirmPasswordReset(
+        username: String,
+        verificationCode: String,
+        newPassword: String
+    ): PasswordResetResult
 }

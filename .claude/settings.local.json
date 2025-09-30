@@ -12,7 +12,12 @@
       "WebFetch(domain:medium.com)",
       "Bash(cat:*)",
       "Bash(unzip:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(xargs:*)",
+      "Bash(for file in RequestPasswordResetUseCaseTest ConfirmPasswordResetUseCaseTest ForgotPasswordViewModelTest)",
+      "Bash(do echo \"=== $file ===\")",
+      "Bash(done)",
+      "Bash(for file in \"net.hitpromo.hitpromoworkstation.domain.usecase.RequestPasswordResetUseCaseTest.html\" \"net.hitpromo.hitpromoworkstation.domain.usecase.ConfirmPasswordResetUseCaseTest.html\" \"net.hitpromo.hitpromoworkstation.presentation.forgotpassword.ForgotPasswordViewModelTest.html\")"
     ],
     "deny": [],
     "ask": []

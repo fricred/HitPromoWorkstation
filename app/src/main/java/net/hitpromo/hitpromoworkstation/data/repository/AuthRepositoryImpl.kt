@@ -1,5 +1,6 @@
 package net.hitpromo.hitpromoworkstation.data.repository
 
+import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -7,10 +8,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import net.hitpromo.hitpromoworkstation.BuildConfig
 import net.hitpromo.hitpromoworkstation.data.local.UserPreferences
 import net.hitpromo.hitpromoworkstation.data.remote.CognitoAuthDataSource
 import net.hitpromo.hitpromoworkstation.domain.model.AuthResult
 import net.hitpromo.hitpromoworkstation.domain.model.AuthenticationState
+import net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType
+import net.hitpromo.hitpromoworkstation.domain.model.PasswordResetResult
 import net.hitpromo.hitpromoworkstation.domain.model.User
 import net.hitpromo.hitpromoworkstation.domain.model.UserRole
 import net.hitpromo.hitpromoworkstation.domain.repository.AuthRepository
@@ -251,6 +255,98 @@ class AuthRepositoryImpl @Inject constructor(
         cognitoDataSource.cancelPasswordChangeSession(sessionId)
     }
 
+    override suspend fun requestPasswordReset(username: String): PasswordResetResult {
+        return try {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "Requesting password reset for user: $username")
+            } else {
+                Log.d(TAG, "Requesting password reset")
+            }
+
+            val result = cognitoDataSource.requestPasswordReset(username)
+
+            when (result) {
+                is PasswordResetResult.CodeSent -> {
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "Password reset code sent to: ${result.deliveryDestination}")
+                    } else {
+                        Log.d(TAG, "Password reset code sent")
+                    }
+                    result
+                }
+                is PasswordResetResult.Error -> {
+                    if (BuildConfig.DEBUG) {
+                        Log.e(TAG, "Password reset request failed: ${result.message}", result.cause)
+                    } else {
+                        Log.e(TAG, "Password reset request failed")
+                    }
+                    result
+                }
+                else -> result
+            }
+        } catch (e: Exception) {
+            val errorMessage = "Password reset request failed: ${e.message}"
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, errorMessage, e)
+            } else {
+                Log.e(TAG, "Password reset request failed", e)
+            }
+            PasswordResetResult.Error(
+                message = errorMessage,
+                errorType = PasswordResetErrorType.UNKNOWN,
+                cause = e
+            )
+        }
+    }
+
+    override suspend fun confirmPasswordReset(
+        username: String,
+        verificationCode: String,
+        newPassword: String
+    ): PasswordResetResult {
+        return try {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "Confirming password reset for user: $username")
+            } else {
+                Log.d(TAG, "Confirming password reset")
+            }
+
+            val result = cognitoDataSource.confirmPasswordReset(username, verificationCode, newPassword)
+
+            when (result) {
+                is PasswordResetResult.ResetComplete -> {
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "Password reset completed successfully for user: $username")
+                    } else {
+                        Log.d(TAG, "Password reset completed successfully")
+                    }
+                    result
+                }
+                is PasswordResetResult.Error -> {
+                    if (BuildConfig.DEBUG) {
+                        Log.e(TAG, "Password reset confirmation failed: ${result.message}", result.cause)
+                    } else {
+                        Log.e(TAG, "Password reset confirmation failed")
+                    }
+                    result
+                }
+                else -> result
+            }
+        } catch (e: Exception) {
+            val errorMessage = "Password reset confirmation failed: ${e.message}"
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, errorMessage, e)
+            } else {
+                Log.e(TAG, "Password reset confirmation failed", e)
+            }
+            PasswordResetResult.Error(
+                message = errorMessage,
+                errorType = PasswordResetErrorType.UNKNOWN,
+                cause = e
+            )
+        }
+    }
+
     /**
      * Initialize authentication state from local storage on app start.
      */
@@ -303,5 +399,9 @@ class AuthRepositoryImpl @Inject constructor(
                 _authenticationState.value = AuthenticationState.Unauthenticated
             }
         }
+    }
+
+    companion object {
+        private const val TAG = "AuthRepositoryImpl"
     }
 }

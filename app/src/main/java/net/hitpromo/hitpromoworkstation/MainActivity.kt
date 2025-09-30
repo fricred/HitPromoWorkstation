@@ -19,6 +19,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import net.hitpromo.hitpromoworkstation.presentation.login.LoginIntent
 import net.hitpromo.hitpromoworkstation.presentation.login.LoginViewModel
 import net.hitpromo.hitpromoworkstation.ui.components.IndustrialSecondaryButton
+import net.hitpromo.hitpromoworkstation.ui.screens.ForgotPasswordScreen
 import net.hitpromo.hitpromoworkstation.ui.screens.ForcePasswordChangeScreen
 import net.hitpromo.hitpromoworkstation.ui.screens.LoginScreen
 import net.hitpromo.hitpromoworkstation.ui.theme.HitPromoWorkstationTheme
@@ -73,6 +74,9 @@ fun IndustrialWorkstationApp(
     // Collect UI state from ViewModel
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // Local navigation state for forgot password flow
+    var showForgotPassword by remember { mutableStateOf(false) }
+
     when {
         // Show loading screen during initial session check
         !uiState.isSessionValidated && uiState.isLoading -> {
@@ -95,6 +99,20 @@ fun IndustrialWorkstationApp(
                 modifier = Modifier.fillMaxSize()
             )
         }
+        // Show forgot password screen if requested
+        showForgotPassword -> {
+            ForgotPasswordScreen(
+                onComplete = {
+                    // Return to login screen after successful password reset
+                    showForgotPassword = false
+                },
+                onCancel = {
+                    // User cancelled forgot password flow, return to login
+                    showForgotPassword = false
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         // Show login screen if not authenticated
         !uiState.isAuthenticated -> {
             LoginScreen(
@@ -103,7 +121,8 @@ fun IndustrialWorkstationApp(
                     viewModel.handleIntent(LoginIntent.SignIn(username, password))
                 },
                 onForgotPasswordClick = {
-                    viewModel.handleIntent(LoginIntent.ForgotPassword)
+                    // Navigate to forgot password screen
+                    showForgotPassword = true
                 },
                 isLoading = uiState.isLoading,
                 errorMessage = uiState.errorMessage,
