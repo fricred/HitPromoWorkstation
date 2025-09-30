@@ -79,6 +79,10 @@ class AuthRepositoryImpl @Inject constructor(
                     AuthResult.Error(result.message, result.cause)
                 }
                 is AuthResult.Loading -> AuthResult.Loading
+                is AuthResult.NewPasswordRequired -> {
+                    // Password change required - pass through to UI layer
+                    AuthResult.NewPasswordRequired(result.username, result.sessionId)
+                }
             }
 
         } catch (e: Exception) {
@@ -116,6 +120,10 @@ class AuthRepositoryImpl @Inject constructor(
                     AuthResult.Error(result.message, result.cause)
                 }
                 is AuthResult.Loading -> AuthResult.Loading
+                is AuthResult.NewPasswordRequired -> {
+                    // This should never happen during sign-out
+                    AuthResult.Error("Unexpected state during sign-out")
+                }
             }
 
         } catch (e: Exception) {
@@ -155,6 +163,10 @@ class AuthRepositoryImpl @Inject constructor(
                     AuthResult.Error(result.message, result.cause)
                 }
                 is AuthResult.Loading -> AuthResult.Loading
+                is AuthResult.NewPasswordRequired -> {
+                    // This should never happen during session refresh
+                    AuthResult.Error("Unexpected state during session refresh")
+                }
             }
 
         } catch (e: Exception) {
@@ -182,6 +194,61 @@ class AuthRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             false
         }
+    }
+
+    override suspend fun confirmNewPassword(sessionId: String, newPassword: String): AuthResult<User> {
+        return try {
+            // Use mutex to synchronize state mutations
+            authMutex.withLock {
+                _authenticationState.value = AuthenticationState.Loading
+            }
+
+            val result = cognitoDataSource.confirmNewPassword(sessionId, newPassword)
+
+            when (result) {
+                is AuthResult.Success -> {
+                    val user = result.data.toDomainModel()
+
+                    // Synchronize state updates
+                    authMutex.withLock {
+                        _currentUser.value = user
+                        _authenticationState.value = AuthenticationState.Authenticated(user)
+                    }
+
+                    // Save session to local storage
+                    userPreferences.saveUserSession(
+                        userId = user.id,
+                        username = user.username,
+                        email = user.email,
+                        role = user.role.name
+                    )
+
+                    AuthResult.Success(user)
+                }
+                is AuthResult.Error -> {
+                    authMutex.withLock {
+                        _authenticationState.value = AuthenticationState.Error(result.message, result.cause)
+                    }
+                    AuthResult.Error(result.message, result.cause)
+                }
+                is AuthResult.Loading -> AuthResult.Loading
+                is AuthResult.NewPasswordRequired -> {
+                    // This should not happen during confirmNewPassword
+                    AuthResult.Error("Unexpected state during password change")
+                }
+            }
+
+        } catch (e: Exception) {
+            val errorMessage = "Password change failed: ${e.message}"
+            authMutex.withLock {
+                _authenticationState.value = AuthenticationState.Error(errorMessage, e)
+            }
+            AuthResult.Error(errorMessage, e)
+        }
+    }
+
+    override fun cancelPasswordChangeSession(sessionId: String) {
+        cognitoDataSource.cancelPasswordChangeSession(sessionId)
     }
 
     /**

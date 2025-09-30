@@ -50,4 +50,48 @@
 
     <!-- Forgot Password -->
     <string name="message_forgot_password">Please contact your system administrator for password reset assistance.</string>
+
+    <!-- Password Change Screen -->
+    <string name="password_change_title">Create New Password</string>
+    <string name="password_change_required_title">Password Change Required</string>
+    <string name="password_change_required_message">Your account requires a new password. Please create a strong password that meets the requirements shown.</string>
+    <string name="password_change_user_label">User: %s</string>
+
+    <!-- Password Fields -->
+    <string name="new_password_label">New Password</string>
+    <string name="new_password_placeholder">Enter new password</string>
+    <string name="confirm_password_label">Confirm Password</string>
+    <string name="confirm_password_placeholder">Re-enter new password</string>
+    <string name="show_password">Show password</string>
+    <string name="hide_password">Hide password</string>
+
+    <!-- Password Requirements -->
+    <string name="password_requirements_title">Password Requirements</string>
+    <string name="requirement_min_length">At least 8 characters</string>
+    <string name="requirement_uppercase">One uppercase letter (A-Z)</string>
+    <string name="requirement_lowercase">One lowercase letter (a-z)</string>
+    <string name="requirement_digit">One number (0-9)</string>
+    <string name="requirement_special_char">Special character (recommended)</string>
+    <string name="requirement_passwords_match">Passwords match</string>
+
+    <!-- Password Strength -->
+    <string name="password_strength_title">Password Strength</string>
+    <string name="password_strength_weak">Weak</string>
+    <string name="password_strength_medium">Medium</string>
+    <string name="password_strength_strong">Strong</string>
+    <string name="password_strength_very_strong">Very Strong</string>
+
+    <!-- Password Change Actions -->
+    <string name="button_change_password">Change Password</string>
+    <string name="button_cancel">Cancel</string>
+    <string name="message_changing_password">Changing password…</string>
+
+    <!-- Password Change Errors -->
+    <string name="error_password_change_failed">Password change failed. Please try again.</string>
+    <string name="error_passwords_not_match">Passwords do not match</string>
+    <string name="error_password_requirements_not_met">Password does not meet minimum requirements</string>
+    <string name="error_password_change_session_expired">Password change session expired. Please sign in again.</string>
+
+    <!-- Password Change Success -->
+    <string name="message_password_change_success">Password changed successfully!</string>
 </resources>

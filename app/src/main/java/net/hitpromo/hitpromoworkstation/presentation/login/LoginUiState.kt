@@ -11,7 +11,10 @@ data class LoginUiState(
     val user: User? = null,
     val errorMessage: String? = null,
     val rememberMe: Boolean = false,
-    val isSessionValidated: Boolean = false
+    val isSessionValidated: Boolean = false,
+    val requirePasswordChange: Boolean = false,
+    val passwordChangeUsername: String? = null,
+    val passwordChangeSessionId: String? = null
 ) {
     /**
      * Check if there's an active error.

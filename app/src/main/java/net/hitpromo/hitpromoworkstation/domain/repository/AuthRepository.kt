@@ -66,4 +66,20 @@ interface AuthRepository {
      * @return true if session is valid, false otherwise
      */
     suspend fun validateSession(): Boolean
+
+    /**
+     * Confirm new password after receiving NEW_PASSWORD_REQUIRED challenge.
+     *
+     * @param sessionId The session ID from the NewPasswordRequired result
+     * @param newPassword The new password to set
+     * @return AuthResult indicating success or failure
+     */
+    suspend fun confirmNewPassword(sessionId: String, newPassword: String): AuthResult<User>
+
+    /**
+     * Cancel an active password change session.
+     *
+     * @param sessionId The session ID to cancel
+     */
+    fun cancelPasswordChangeSession(sessionId: String)
 }

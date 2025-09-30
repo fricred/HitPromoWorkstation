@@ -31,5 +31,6 @@ sealed class AuthenticationState {
 sealed class AuthResult<out T> {
     data class Success<T>(val data: T) : AuthResult<T>()
     data class Error(val message: String, val cause: Throwable? = null) : AuthResult<Nothing>()
+    data class NewPasswordRequired(val username: String, val sessionId: String) : AuthResult<Nothing>()
     object Loading : AuthResult<Nothing>()
 }

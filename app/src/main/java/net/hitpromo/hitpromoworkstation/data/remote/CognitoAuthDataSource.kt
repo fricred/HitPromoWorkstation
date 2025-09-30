@@ -8,9 +8,15 @@ import com.amplifyframework.auth.cognito.AWSCognitoAuthSession
 import com.amplifyframework.auth.cognito.exceptions.invalidstate.SignedInException
 import com.amplifyframework.auth.exceptions.NotAuthorizedException
 import com.amplifyframework.core.Amplify
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,6 +59,32 @@ class CognitoAuthDataSource @Inject constructor(
      * Uses ConcurrentHashMap for thread-safe operations without additional locking.
      */
     private val activeCalls = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * Track active password change sessions.
+     * Maps sessionId to SessionInfo for session validation and expiration tracking.
+     */
+    private val activePasswordChangeSessions = ConcurrentHashMap<String, SessionInfo>()
+
+    /**
+     * Track cleanup jobs for password change sessions.
+     * Maps sessionId to the Job handling the cleanup to enable cancellation.
+     */
+    private val cleanupJobs = ConcurrentHashMap<String, Job>()
+
+    /**
+     * Session info data class to track username and creation time.
+     */
+    private data class SessionInfo(
+        val username: String,
+        val createdAt: Long = System.currentTimeMillis()
+    )
+
+    /**
+     * Coroutine scope for session cleanup operations.
+     * Uses SupervisorJob to prevent cleanup failures from affecting other operations.
+     */
+    private val cleanupScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     /**
      * Update authentication state in a thread-safe manner.
@@ -184,31 +216,45 @@ class CognitoAuthDataSource @Inject constructor(
                             val nextStep = result.nextStep
                             Log.w(TAG, "Sign-in requires additional step: ${nextStep?.signInStep}")
 
-                            val errorMessage = when (nextStep?.signInStep?.toString()) {
-                                "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD" ->
-                                    stringProvider.getString(R.string.error_change_password_required)
-                                "CONFIRM_SIGN_IN_WITH_CUSTOM_CHALLENGE" ->
-                                    stringProvider.getString(R.string.error_custom_challenge_required)
-                                "CONFIRM_SIGN_IN_WITH_SMS_MFA_CODE" ->
-                                    stringProvider.getString(R.string.error_sms_mfa_required)
-                                "CONFIRM_SIGN_IN_WITH_TOTP_CODE" ->
-                                    stringProvider.getString(R.string.error_totp_required)
-                                "CONTINUE_SIGN_IN_WITH_MFA_SELECTION" ->
-                                    stringProvider.getString(R.string.error_mfa_selection_required)
-                                "CONTINUE_SIGN_IN_WITH_TOTP_SETUP" ->
-                                    stringProvider.getString(R.string.error_totp_setup_required)
-                                "CONFIRM_SIGN_UP" ->
-                                    stringProvider.getString(R.string.error_confirm_sign_up_required)
-                                "RESET_PASSWORD" ->
-                                    stringProvider.getString(R.string.error_reset_password_required)
-                                else ->
-                                    stringProvider.getString(
-                                        R.string.error_additional_steps_required,
-                                        nextStep?.signInStep ?: "Unknown"
-                                    )
+                            when (nextStep?.signInStep?.toString()) {
+                                "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD" -> {
+                                    // Generate session ID for tracking password change flow
+                                    val sessionId = UUID.randomUUID().toString()
+                                    activePasswordChangeSessions[sessionId] = SessionInfo(username)
+                                    if (BuildConfig.DEBUG) {
+                                        Log.d(TAG, "Password change required for user: $username, sessionId: $sessionId")
+                                    } else {
+                                        Log.d(TAG, "Password change required, session created")
+                                    }
+                                    // Schedule cleanup of this session after expiration timeout
+                                    scheduleSessionCleanup(sessionId)
+                                    AuthResult.NewPasswordRequired(username, sessionId)
+                                }
+                                else -> {
+                                    val errorMessage = when (nextStep?.signInStep?.toString()) {
+                                        "CONFIRM_SIGN_IN_WITH_CUSTOM_CHALLENGE" ->
+                                            stringProvider.getString(R.string.error_custom_challenge_required)
+                                        "CONFIRM_SIGN_IN_WITH_SMS_MFA_CODE" ->
+                                            stringProvider.getString(R.string.error_sms_mfa_required)
+                                        "CONFIRM_SIGN_IN_WITH_TOTP_CODE" ->
+                                            stringProvider.getString(R.string.error_totp_required)
+                                        "CONTINUE_SIGN_IN_WITH_MFA_SELECTION" ->
+                                            stringProvider.getString(R.string.error_mfa_selection_required)
+                                        "CONTINUE_SIGN_IN_WITH_TOTP_SETUP" ->
+                                            stringProvider.getString(R.string.error_totp_setup_required)
+                                        "CONFIRM_SIGN_UP" ->
+                                            stringProvider.getString(R.string.error_confirm_sign_up_required)
+                                        "RESET_PASSWORD" ->
+                                            stringProvider.getString(R.string.error_reset_password_required)
+                                        else ->
+                                            stringProvider.getString(
+                                                R.string.error_additional_steps_required,
+                                                nextStep?.signInStep ?: "Unknown"
+                                            )
+                                    }
+                                    AuthResult.Error(errorMessage)
+                                }
                             }
-
-                            AuthResult.Error(errorMessage)
                         }
                     }
                     else -> {
@@ -328,6 +374,263 @@ class CognitoAuthDataSource @Inject constructor(
                 stringProvider.getString(R.string.error_sign_out_failed, e.message ?: "Unknown"),
                 e
             )
+        }
+    }
+
+    /**
+     * Confirm new password after receiving NEW_PASSWORD_REQUIRED challenge.
+     *
+     * @param sessionId The session ID received from signIn when password change was required
+     * @param newPassword The new password to set
+     * @return AuthResult with CognitoUserDto on success or error
+     */
+    suspend fun confirmNewPassword(sessionId: String, newPassword: String): AuthResult<CognitoUserDto> {
+        return try {
+            // Validate session atomically - single read with elvis operator
+            val sessionInfo = activePasswordChangeSessions[sessionId] ?: run {
+                Log.e(TAG, "Invalid or expired password change session: $sessionId")
+                return AuthResult.Error(stringProvider.getString(R.string.error_session_expired))
+            }
+
+            // Defensive check: validate session hasn't expired even if cleanup hasn't run yet
+            val now = System.currentTimeMillis()
+            if ((now - sessionInfo.createdAt) > SESSION_EXPIRATION_MS) {
+                Log.w(TAG, "Session expired but cleanup hasn't run yet: $sessionId")
+                cleanupSession(sessionId)
+                return AuthResult.Error(stringProvider.getString(R.string.error_session_expired))
+            }
+
+            val username = sessionInfo.username
+
+            // Check network connectivity
+            if (!networkMonitor.isNetworkAvailable()) {
+                return AuthResult.Error(stringProvider.getString(R.string.error_network_unavailable))
+            }
+
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "Confirming new password for user: $username, sessionId: $sessionId")
+            } else {
+                Log.d(TAG, "Confirming new password")
+            }
+
+            // Generate unique call ID for tracking
+            val callId = UUID.randomUUID().toString()
+            activeCalls.add(callId)
+
+            // Perform Cognito confirmSignIn with new password
+            val confirmResult = withTimeout(CONFIRM_PASSWORD_TIMEOUT_MS) {
+                suspendCancellableCoroutine<Pair<Any?, AuthException?>> { continuation ->
+                    val confirmCall = Amplify.Auth.confirmSignIn(
+                        newPassword,
+                        { result ->
+                            // Check if this call is still active before processing result
+                            if (activeCalls.contains(callId)) {
+                                if (BuildConfig.DEBUG) {
+                                    Log.d(TAG, "Password change successful for user: $username")
+                                } else {
+                                    Log.d(TAG, "Password change successful")
+                                }
+                                if (continuation.isActive) {
+                                    continuation.resume(Pair(result, null))
+                                }
+                            } else {
+                                Log.d(TAG, "Ignoring password change result for cancelled call")
+                            }
+                        },
+                        { error ->
+                            // Check if this call is still active before processing error
+                            if (activeCalls.contains(callId)) {
+                                if (BuildConfig.DEBUG) {
+                                    Log.e(TAG, "Password change failed for user: $username", error)
+                                } else {
+                                    Log.e(TAG, "Password change failed", error)
+                                }
+                                if (continuation.isActive) {
+                                    continuation.resume(Pair(null, error))
+                                }
+                            } else {
+                                Log.d(TAG, "Ignoring password change error for cancelled call")
+                            }
+                        }
+                    )
+
+                    continuation.invokeOnCancellation {
+                        // Remove from active calls to prevent processing results
+                        activeCalls.remove(callId)
+                        if (BuildConfig.DEBUG) {
+                            Log.w(TAG, "Password change cancelled for user: $username")
+                        } else {
+                            Log.w(TAG, "Password change cancelled")
+                        }
+                    }
+                }
+            }
+
+            // Clean up call tracking after successful completion
+            activeCalls.remove(callId)
+
+            // Check if there was an error
+            val error = confirmResult.second
+            if (error != null) {
+                // Clean up session and cancel cleanup job
+                val sessionInfo = activePasswordChangeSessions[sessionId]
+                cleanupSession(sessionId)
+                if (sessionInfo != null) {
+                    if (BuildConfig.DEBUG) {
+                        Log.w(TAG, "Session removed for user: ${sessionInfo.username} due to error: ${error.message}")
+                    } else {
+                        Log.w(TAG, "Password change session removed due to error")
+                    }
+                }
+                throw error
+            }
+
+            val result = confirmResult.first
+            if (result != null) {
+                when (result) {
+                    is com.amplifyframework.auth.result.AuthSignInResult -> {
+                        if (result.isSignedIn) {
+                            // Clean up password change session and cancel cleanup job
+                            val sessionInfo = activePasswordChangeSessions[sessionId]
+                            cleanupSession(sessionId)
+                            if (sessionInfo != null) {
+                                if (BuildConfig.DEBUG) {
+                                    Log.d(TAG, "Session removed for user: ${sessionInfo.username} after successful password change")
+                                } else {
+                                    Log.d(TAG, "Password change session removed after success")
+                                }
+                            }
+
+                            // Fetch user attributes after successful password change
+                            val user = fetchCurrentUserAttributes()
+                            if (user != null) {
+                                updateAuthState(user, true)
+                                AuthResult.Success(user)
+                            } else {
+                                AuthResult.Error(stringProvider.getString(R.string.error_fetch_user_attributes))
+                            }
+                        } else {
+                            // Additional step required after password change (unlikely but possible)
+                            val nextStep = result.nextStep
+                            Log.w(TAG, "Additional step required after password change: ${nextStep?.signInStep}")
+                            val sessionInfo = activePasswordChangeSessions[sessionId]
+                            cleanupSession(sessionId)
+                            if (sessionInfo != null) {
+                                if (BuildConfig.DEBUG) {
+                                    Log.w(TAG, "Session removed for user: ${sessionInfo.username} - additional step required")
+                                } else {
+                                    Log.w(TAG, "Password change session removed - additional step required")
+                                }
+                            }
+                            AuthResult.Error(
+                                stringProvider.getString(
+                                    R.string.error_additional_steps_required,
+                                    nextStep?.signInStep ?: "Unknown"
+                                )
+                            )
+                        }
+                    }
+                    else -> {
+                        Log.e(TAG, "Unexpected result type: ${result::class.java.simpleName}")
+                        val sessionInfo = activePasswordChangeSessions[sessionId]
+                        cleanupSession(sessionId)
+                        if (sessionInfo != null) {
+                            if (BuildConfig.DEBUG) {
+                                Log.w(TAG, "Session removed for user: ${sessionInfo.username} - unexpected result type")
+                            } else {
+                                Log.w(TAG, "Password change session removed - unexpected result type")
+                            }
+                        }
+                        AuthResult.Error(stringProvider.getString(R.string.error_password_change_failed))
+                    }
+                }
+            } else {
+                val sessionInfo = activePasswordChangeSessions[sessionId]
+                cleanupSession(sessionId)
+                if (sessionInfo != null) {
+                    if (BuildConfig.DEBUG) {
+                        Log.w(TAG, "Session removed for user: ${sessionInfo.username} - null result")
+                    } else {
+                        Log.w(TAG, "Password change session removed - null result")
+                    }
+                }
+                AuthResult.Error(stringProvider.getString(R.string.error_password_change_failed))
+            }
+
+        } catch (e: AuthException) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Password change authentication error", e)
+            } else {
+                Log.e(TAG, "Password change authentication error", e)
+            }
+            // Clean up session and cancel cleanup job
+            val sessionInfo = activePasswordChangeSessions[sessionId]
+            cleanupSession(sessionId)
+            if (sessionInfo != null) {
+                if (BuildConfig.DEBUG) {
+                    Log.w(TAG, "Session removed for user: ${sessionInfo.username} due to AuthException: ${e.message}")
+                } else {
+                    Log.w(TAG, "Password change session removed due to error")
+                }
+            }
+
+            // Check exception message for specific errors
+            val errorMessage = when {
+                e.message?.contains("InvalidPasswordException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_password_weak)
+                e.message?.contains("InvalidParameterException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_invalid_parameter)
+                else -> stringProvider.getString(R.string.error_password_change_failed)
+            }
+            AuthResult.Error(errorMessage, e)
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Password change timeout", e)
+            } else {
+                Log.e(TAG, "Password change timeout", e)
+            }
+            val sessionInfo = activePasswordChangeSessions[sessionId]
+            cleanupSession(sessionId)
+            if (sessionInfo != null) {
+                if (BuildConfig.DEBUG) {
+                    Log.w(TAG, "Session removed for user: ${sessionInfo.username} due to timeout")
+                } else {
+                    Log.w(TAG, "Password change session removed due to timeout")
+                }
+            }
+            AuthResult.Error(stringProvider.getString(R.string.error_operation_timeout), e)
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Unexpected error during password change", e)
+            } else {
+                Log.e(TAG, "Unexpected error during password change", e)
+            }
+            val sessionInfo = activePasswordChangeSessions[sessionId]
+            cleanupSession(sessionId)
+            if (sessionInfo != null) {
+                if (BuildConfig.DEBUG) {
+                    Log.w(TAG, "Session removed for user: ${sessionInfo.username} due to unexpected error: ${e.message}")
+                } else {
+                    Log.w(TAG, "Password change session removed due to error")
+                }
+            }
+            AuthResult.Error(stringProvider.getString(R.string.error_password_change_failed), e)
+        }
+    }
+
+    /**
+     * Cancel an active password change session.
+     * Cancels the cleanup job and removes the session from active sessions.
+     *
+     * @param sessionId The session ID to cancel
+     */
+    fun cancelPasswordChangeSession(sessionId: String) {
+        val sessionInfo = activePasswordChangeSessions[sessionId]
+        cleanupSession(sessionId)
+        if (BuildConfig.DEBUG && sessionInfo != null) {
+            Log.d(TAG, "Password change session cancelled for user: ${sessionInfo.username}")
+        } else if (sessionInfo != null) {
+            Log.d(TAG, "Password change session cancelled")
         }
     }
 
@@ -711,9 +1014,78 @@ class CognitoAuthDataSource @Inject constructor(
         }
     }
 
+    /**
+     * Schedule automatic cleanup of a password change session after expiration timeout.
+     * Sessions are automatically removed after SESSION_EXPIRATION_MS if not used.
+     * Cancels any existing cleanup job for the session before creating a new one.
+     *
+     * @param sessionId The session ID to schedule for cleanup
+     */
+    private fun scheduleSessionCleanup(sessionId: String) {
+        // Cancel existing cleanup job if present
+        cleanupJobs[sessionId]?.cancel()
+
+        // Schedule new cleanup job
+        val job = cleanupScope.launch {
+            delay(SESSION_EXPIRATION_MS)
+            val removedSession = activePasswordChangeSessions.remove(sessionId)
+            cleanupJobs.remove(sessionId)
+            if (removedSession != null) {
+                if (BuildConfig.DEBUG) {
+                    Log.w(TAG, "Password change session expired and removed: $sessionId for user: ${removedSession.username}")
+                } else {
+                    Log.w(TAG, "Password change session expired and removed")
+                }
+            }
+        }
+
+        // Store job reference for potential cancellation
+        cleanupJobs[sessionId] = job
+    }
+
+    /**
+     * Clean up a session by cancelling its cleanup job and removing from active sessions.
+     * Thread-safe helper method to ensure no job leaks.
+     *
+     * @param sessionId The session ID to clean up
+     */
+    private fun cleanupSession(sessionId: String) {
+        // Cancel and remove cleanup job
+        cleanupJobs.remove(sessionId)?.cancel()
+        // Remove session
+        activePasswordChangeSessions.remove(sessionId)
+    }
+
+    /**
+     * Manually trigger cleanup of expired sessions.
+     * This can be called periodically or on-demand to ensure no memory leaks.
+     * Removes all sessions older than SESSION_EXPIRATION_MS.
+     */
+    fun cleanupExpiredSessions() {
+        val now = System.currentTimeMillis()
+        val expiredSessions = activePasswordChangeSessions.entries
+            .filter { (_, sessionInfo) ->
+                (now - sessionInfo.createdAt) > SESSION_EXPIRATION_MS
+            }
+            .map { it.key }
+
+        expiredSessions.forEach { sessionId ->
+            val removedSession = activePasswordChangeSessions.remove(sessionId)
+            if (removedSession != null && BuildConfig.DEBUG) {
+                Log.w(TAG, "Cleaned up expired session: $sessionId for user: ${removedSession.username}")
+            }
+        }
+
+        if (expiredSessions.isNotEmpty()) {
+            Log.i(TAG, "Cleaned up ${expiredSessions.size} expired password change sessions")
+        }
+    }
+
     companion object {
         private const val TAG = "CognitoAuthDataSource"
         private const val AUTH_TIMEOUT_MS = 30_000L // 30 seconds
         private const val SIGN_IN_TIMEOUT_MS = 45_000L // 45 seconds for sign-in
+        private const val CONFIRM_PASSWORD_TIMEOUT_MS = 45_000L // 45 seconds for password change
+        private const val SESSION_EXPIRATION_MS = 300_000L // 5 minutes - password change sessions expire
     }
 }

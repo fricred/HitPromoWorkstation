@@ -19,6 +19,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import net.hitpromo.hitpromoworkstation.presentation.login.LoginIntent
 import net.hitpromo.hitpromoworkstation.presentation.login.LoginViewModel
 import net.hitpromo.hitpromoworkstation.ui.components.IndustrialSecondaryButton
+import net.hitpromo.hitpromoworkstation.ui.screens.ForcePasswordChangeScreen
 import net.hitpromo.hitpromoworkstation.ui.screens.LoginScreen
 import net.hitpromo.hitpromoworkstation.ui.theme.HitPromoWorkstationTheme
 
@@ -76,6 +77,23 @@ fun IndustrialWorkstationApp(
         // Show loading screen during initial session check
         !uiState.isSessionValidated && uiState.isLoading -> {
             LoadingScreen(modifier = Modifier.fillMaxSize())
+        }
+        // Show password change screen if required
+        uiState.requirePasswordChange && uiState.passwordChangeUsername != null && uiState.passwordChangeSessionId != null -> {
+            ForcePasswordChangeScreen(
+                username = uiState.passwordChangeUsername!!,
+                sessionId = uiState.passwordChangeSessionId!!,
+                onPasswordChangeSuccess = {
+                    // Password changed successfully, user is now authenticated
+                    // Clear the password change flag to show authenticated state
+                    viewModel.handleIntent(LoginIntent.ClearPasswordChangeState)
+                },
+                onCancel = {
+                    // User cancelled password change, return to login
+                    viewModel.handleIntent(LoginIntent.SignOut)
+                },
+                modifier = Modifier.fillMaxSize()
+            )
         }
         // Show login screen if not authenticated
         !uiState.isAuthenticated -> {

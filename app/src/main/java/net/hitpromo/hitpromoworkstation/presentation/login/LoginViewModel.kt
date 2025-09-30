@@ -67,6 +67,9 @@ class LoginViewModel @Inject constructor(
             is LoginIntent.RefreshSession -> {
                 refreshSession()
             }
+            is LoginIntent.ClearPasswordChangeState -> {
+                clearPasswordChangeState()
+            }
         }
     }
 
@@ -112,6 +115,16 @@ class LoginViewModel @Inject constructor(
                                 currentState = _uiState.value
                             )
                         }
+                        is AuthResult.NewPasswordRequired -> {
+                            // Navigate to password change screen
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                requirePasswordChange = true,
+                                passwordChangeUsername = result.username,
+                                passwordChangeSessionId = result.sessionId,
+                                errorMessage = null
+                            )
+                        }
                     }
                 }
         }
@@ -142,6 +155,13 @@ class LoginViewModel @Inject constructor(
                         is AuthResult.Error -> {
                             _uiState.value = LoginUiState.Error(
                                 message = "Failed to sign out: ${result.message}",
+                                currentState = _uiState.value
+                            )
+                        }
+                        is AuthResult.NewPasswordRequired -> {
+                            // This should never happen during sign-out
+                            _uiState.value = LoginUiState.Error(
+                                message = "Unexpected state during sign-out",
                                 currentState = _uiState.value
                             )
                         }
@@ -207,6 +227,17 @@ class LoginViewModel @Inject constructor(
     }
 
     /**
+     * Clear password change state after successful change.
+     */
+    private fun clearPasswordChangeState() {
+        _uiState.value = _uiState.value.copy(
+            requirePasswordChange = false,
+            passwordChangeUsername = null,
+            passwordChangeSessionId = null
+        )
+    }
+
+    /**
      * Initialize the UI state based on stored preferences.
      *
      * Checks if user was previously logged in and validates their session with Amplify.
@@ -258,6 +289,12 @@ class LoginViewModel @Inject constructor(
                                     is AuthResult.Loading -> {
                                         // Keep loading state
                                         _uiState.value = LoginUiState.Loading(_uiState.value)
+                                    }
+                                    is AuthResult.NewPasswordRequired -> {
+                                        // This should never happen during session validation
+                                        Log.w(TAG, "Unexpected password change required during session validation")
+                                        userPreferences.clearUserSession()
+                                        _uiState.value = LoginUiState.Unauthenticated(rememberMe)
                                     }
                                 }
                             }

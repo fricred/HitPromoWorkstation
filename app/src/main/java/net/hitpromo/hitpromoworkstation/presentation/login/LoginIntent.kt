@@ -33,4 +33,9 @@ sealed class LoginIntent {
      * Refresh the authentication session.
      */
     object RefreshSession : LoginIntent()
+
+    /**
+     * Clear password change state after successful password change.
+     */
+    object ClearPasswordChangeState : LoginIntent()
 }
