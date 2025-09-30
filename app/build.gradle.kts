@@ -22,6 +22,11 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        ndk {
+            // Enable 16KB page size alignment for native libraries
+            debugSymbolLevel = "FULL"
+        }
     }
 
     buildTypes {
@@ -51,6 +56,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 }

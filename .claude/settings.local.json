@@ -10,7 +10,9 @@
       "Bash(./gradlew:*)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:medium.com)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(unzip:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []
