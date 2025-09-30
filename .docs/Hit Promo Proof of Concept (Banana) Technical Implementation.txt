@@ -1,0 +1,183 @@
+﻿🧩 End-to-End Architecture & Implementation Plan
+Project Name: Intelligent Workstation & Production Visibility Platform
+Partner: RevStar (AWS Advanced Tier Partner)
+Infrastructure: Samsung SM-X210 tablets + AWS Serverless backend + Customer APIs + Amazon Bedrock
+________________
+
+
+🔸 1. Tablet-Side Implementation (Edge Layer)
+Component
+	Description
+	Platform
+	Android tablets running React Native (Expo Bare Workflow)
+	On-device ML
+	Yolov11n exported to TensorFlow Lite model to count products from rear camera
+	Job tracking
+	Barcode scanner or manual input to associate counts with job IDs
+	Presence detection
+	Use front camera to detect operator when production is idle
+	Edge logic
+	Light business rules run locally (e.g., when to switch cameras)
+	Data transmission
+	Secure HTTPS calls to AWS Fargate Task (every 30–60s)
+	Offline tolerance
+	Local caching + retries if connectivity is lost
+	________________
+
+
+🔸 2. AWS Ingestion & Processing (Cloud Layer)
+AWS Service
+	Role
+	Amazon Fargate Task + ALB
+	Receives telemetry from tablets securely
+	AWS ECS/Fargate (Ingest Function)
+	Parses payload, validates structure, writes to backend
+	Amazon DynamoDB
+	Stores time-series data: counts, presence events, job metadata
+	Amazon S3
+	Stores snapshots when operator is missing (presence photo uploads)
+	AWS Fargate (Forwarding Function)
+	Sends count + presence data to customer APIs
+	Amazon EventBridge
+	Orchestrates jobs: triggers snapshot, schedule Bedrock runs
+	________________
+
+
+🔸 3. Customer API Integration
+Data Type
+	API Calls from RevStar to Customer
+	Product Counts
+	Sent in near real-time per station & job
+	Presence Events
+	Only sent when production is idle and no operator detected
+	Snapshot Image (optional)
+	S3 URL or base64 image included in payload
+	Sync Logic
+	RevStar expects a Job Start/Stop API from customer to tag image data with job ID
+	________________
+
+
+🔸 4. Amazon Bedrock (GenAI Layer)
+Purpose
+	Details
+	Summarization
+	Bedrock (e.g. Claude or Titan) generates daily/weekly summaries
+	Prompts
+	Describe idle time trends, station performance, and production anomalies
+	Input Data
+	Aggregated job + presence logs from DynamoDB
+	Execution
+	Triggered by EventBridge on schedule (e.g., daily 6pm)
+	Output
+	Stored in S3 or sent to internal dashboard/reporting tools
+	Use Cases
+	Value-add insights for managers (not for real-time ops)
+	This GenAI layer is the hook for AWS funding via PoC cash or Imagine Grant support.
+________________
+
+
+🔸 5. Monitoring & Ops (Optional for RevStar)
+Component
+	Purpose
+	CloudWatch Logs
+	Monitor API/Tasks health, request failures
+	X-Ray (optional)
+	Trace Fargate execution across services
+	SNS or Slackbot
+	Internal alerts for failures or delays (not customer-facing)
+	________________
+
+
+🔸 Data Flow Overview (Illustrated Step-by-Step)
+1. Tablet Begins Job
+
+   * User scans the barcode or selects job
+
+   * Starts recording with rear camera
+
+   * Starts counting products on-device
+
+   * Sends initial telemetry to ALB -> Fargate
+
+      2. Live Count Streaming
+
+         * Every 30–60 seconds, sends:
+
+            * Job ID
+
+            * Station ID
+
+            * Count since last push
+
+            * Timestamp
+
+               * Fargate task stores in DynamoDB
+
+               * Fargate task forwards to the customer API
+
+                  3. Idle Detection Triggers Presence Check
+
+                     * If count = 0 for >5 minutes:
+
+                        * Camera switches to front
+
+                        * Presence image captured
+
+                        * Image uploaded to S3
+
+                        * Presence event + photo metadata sent to customer API
+
+                           4. End of Job
+
+                              * User ends session
+
+                              * Job is closed on the tablet and API
+
+                                 5. Bedrock Summary Process (Fargate Internal Scheduled Task)
+
+                                    * Fargate Task is configured with a scheduled daily task for summarization (nestjs cron)
+
+                                    * Aggregates data by station/job/day
+
+                                    * Sends a structured prompt to Amazon Bedrock
+
+                                    * Stores summarized insights in S3 for internal review
+
+________________
+
+
+🔸 Optional Future Enhancements
+Feature
+	Description
+	Greengrass Lite
+	Enable edge ML deployment for real-time inference offline
+	Live Stream Proxy
+	For future real-time dashboards (bandwidth dependent)
+	Kinesis Video Streams
+	Only if future scenarios require continuous video (not current scope)
+	IAM Roles Anywhere
+	For secure device registration and authentication
+	AWS AppSync (GraphQL)
+	If tablets eventually need real-time job queue / paperless interface
+	________________
+
+
+Summary Architecture Diagram (Text Format)
+[Tablet App (Expo)]
+ ├── Rear Camera → On-device Model → Count
+ ├── Front Camera → Image → S3 (when idle)
+ ├── Barcode Scan / Job Start UI
+ └── HTTPS → Fargate + ALB
+
+
+[API Gateway]
+ └── Fargate Task (Ingest)
+     ├── DynamoDB (Job + Count + Presence Logs)
+     ├── S3 (Store snapshot)
+     └── Fargate Task (Forward to Customer APIs)
+
+
+[Amazon EventBridge]
+ └── Fargate Internal Scheduled Task (Scheduled)
+     └── Amazon Bedrock (Generate Summary)
+         └── S3 (Store Reports)

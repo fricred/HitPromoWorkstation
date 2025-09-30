@@ -1,0 +1,106 @@
+﻿Proof of Concept Implementation Recommendation
+PoC goals & acceptance criteria
+* Goals
+   * 10 tablets (SM-X210) stream live video to AWS.
+   * Real-time object detection (OpenVINO/DL Streamer) on each stream in a Fargate task.
+   * Lightweight web UI to: list devices, view live streams, see detections, start/stop streams, and tweak basic camera settings.
+
+   * Accept when
+   * Each device is visible in the UI with online/offline state.
+   * Live view works for one of the ingest options (A: WebRTC; B: RTSP→KVS via kvssink).
+   * Analytics shows per-stream detection counts and bounding boxes (overlay or side-panel).
+   * The system sustains 10 concurrent streams with stable CPU/memory and predictable latency.
+________________
+
+
+Option A: Android → KVS (WebRTC) → Fargate viewer + analytics
+A1. Android publisher app (tablet)
+   * Integrate KVS WebRTC Android SDK sample; configure Cognito and region. Ensure H.264 video.
+   * Use Camera2/CameraX + MediaCodec(H.264) (e.g., 1280×720 @ 15–30 fps, GOP ≈ 2s) to balance quality, thermals, and bandwidth.
+   * Run a foreground service with the right service type (camera, optionally dataSync) for Android 14+/SDK 34+ rules; for SDK 35 you still specify types. Keep a persistent notification.
+   * Implement resilience: auto-reconnect on network blips, keep Wi-Fi lock, exponential backoff, and health pings (e.g., via IoT MQTT or HTTPS).
+
+Deliverable: APK that, on login, publishes to its own signaling channel and shows “streaming” status.
+A2. Fargate “viewer + analytics” workers
+      * Container image includes:
+
+         1. KVS WebRTC C SDK (build samples; you’ll use viewer path).
+         2. GStreamer core + plugiins as needed, avdec_h264 (or vah264dec if you later go to GPU/VA), appsink/appsrc, and DLStreamer (gvadetect, gvatrack, gvawatermark).
+
+            * Process model: one viewer worker per channel (10 workers for 10 tablets):
+
+               1. Worker joins the channel as viewer.
+               2. Extracts video stream from inbound WebRTC.
+               3. Gstreamer pipeline extracts media and runs ML inference on video stream
+               4. ML inference results and related frames or video clips stored for review
+
+Example viewer GStreamer pipeline (inside your worker):
+
+appsrc is-live=true format=time do-timestamp=true ! h264parse ! avdec_h264 !
+  videoconvert ! video/x-raw,format=NV12 !
+  gvadetect model=/models/ssd.xml device=CPU inference-interval=2 !
+  gvatrack tracking-type=short-term-imageless !
+  queue ! appsink sync=false
+                  * (Tune inference-interval and tracking to keep CPU in check.)
+                  * Output: post detection events (JSON) to DynamoDB (per stream table) and to IoT MQTT (for UI live overlays). Optionally save snapshots to S3.
+Note: Fargate has no GPU support; if you later need heavier models/full-rate 1080p across 10 streams, move to ECS on EC2 GPU instances
+A3. Web UI (for Option A live view)
+                  * Stack: React (Vite) + Amplify Auth (Cognito) + API Gateway + Lambda + DynamoDB
+                  * Live player: For WebRTC, embed KVS WebRTC JS SDK viewer component; it connects to each signaling channel for sub-second live view in the browser
+                  * Device page: list tablets (from IoT registry/DynamoDB), “start/stop stream,” show bitrate/fps, detection counts, and bounding boxes (via MQTT or polling your API).
+                  * Admin: basic camera params (resolution/fps), set per-tablet channel name/region, and display diagnostics.
+
+
+
+
+________________
+
+
+Option B: Android RTSP → Fargate GStreamer/OpenVINO → kvssink → KVS (HLS/DASH UI)
+There are two ways to get RTSP out of Android:
+                  * B1. Tablet acts as RTSP server (Camera2/MediaCodec → RTSP server lib). Good on managed LAN/VPN; difficult across NATs.
+                  * **B2. Tablet “pushes” to a cloud relay (e.g., MediaMTX) over TCP; then the cloud pulls from MediaMTX and runs analytics/ingest. This avoids inbound NAT issues.
+
+B1. Android RTSP app
+                     * Implement or adopt an RTSP server library. Ensure H.264 encode and interleaved TCP support for robustness.
+                     * Still run as an Android foreground service (same rules as A1).
+                     * If no VPN/LAN, prefer push to a public relay (MediaMTX supports RTSP publish); otherwise you’ll need per-site VPN and firewall rules.
+
+B2. Fargate ingest + analytics + KVS publish
+Single pipeline per stream (two branches via tee):
+
+rtspsrc location=rtsp://<tablet-or-mediartx>/stream protocols=tcp latency=200 !  
+rtph264depay ! h264parse ! tee name=t
+# Branch 1: analytics (decode → OpenVINO)
+t. ! queue ! avdec_h264 ! videoconvert ! video/x-raw,format=NV12 !
+    gvadetect model=/models/ssd.xml device=CPU inference-interval=2 !
+    gvatrack ! gvawatermark ! fakesink
+
+
+# Branch 2: publish compressed H.264 to KVS for HLS/DASH
+t. ! queue ! kvssink stream-name="tablet-01" storage-size=512 aws-region=us-east-1
+
+
+                        * kvssink publishes to Kinesis Video Streams; you’ll then play via HLS/DASH.
+                        * Credentials for kvssink: provide via environment/role; see docs for chain (incl. IoT auth route if desired).
+
+B3. Web UI (for Option B live view)
+                           * Live player: Use HLS.js (or Shaka for DASH) against URLs obtained with GetHLSStreamingSessionURL. Remember retention>0 and H.264/H.265 requirements.
+                           * Device list & controls identical to Option A.
+________________
+
+
+Risks & mitigations
+                           * Fargate compute bounds (no GPU): choose lightweight models, throttle inference (inference-interval), and track between frames. Migrate analytics to ECS on EC2 GPU for heavier models.
+                           * RTSP reachability: prefer WebRTC (A). If RTSP is required, add a relay (MediaMTX) and have tablets push; otherwise, deploy VPN.
+                           * Android lifecycle/thermals: foreground service types + adaptive bitrate/fps; monitor temperature and drop frame rate when needed. (advanced feature for production; may not be needed for production architecture)
+                           * Playback trade-offs: WebRTC is sub-second; HLS/DASH is multi-second but broadly compatible. Decide per use-case page.
+
+________________
+
+
+What you’ll have at the end of PoC
+                              * 10 tablets streaming with both paths validated (A and B).
+                              * Fargate workers doing real-time detection with OpenVINO (counts + boxes).
+                              * A secure UI for live viewing (WebRTC/HLS), device status, and basic controls.
+                              * Logs/metrics that prove stability and give a sizing baseline for the next phase.

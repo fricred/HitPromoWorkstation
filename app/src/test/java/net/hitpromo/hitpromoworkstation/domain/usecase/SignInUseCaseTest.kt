@@ -42,7 +42,7 @@ class SignInUseCaseTest {
     fun `should emit loading then success when sign in succeeds`() = runTest {
         // Given
         val username = "testuser"
-        val password = "password123"
+        val password = "Password123"
         coEvery { authRepository.signIn(username, password) } returns AuthResult.Success(mockUser)
 
         // When & Then
@@ -57,7 +57,7 @@ class SignInUseCaseTest {
     fun `should emit loading then error when sign in fails`() = runTest {
         // Given
         val username = "testuser"
-        val password = "wrongpassword"
+        val password = "WrongPassword123"
         val errorMessage = "Invalid credentials"
         coEvery { authRepository.signIn(username, password) } returns AuthResult.Error(errorMessage)
 
@@ -119,13 +119,13 @@ class SignInUseCaseTest {
     fun `should emit error for short password`() = runTest {
         // Given
         val username = "testuser"
-        val password = "12345"
+        val password = "Pass1"
 
         // When & Then
         signInUseCase(username, password).test {
             assertEquals(AuthResult.Loading, awaitItem())
             val errorResult = awaitItem() as AuthResult.Error
-            assertEquals("Password must be at least 6 characters", errorResult.message)
+            assertEquals("Password must be at least 8 characters and contain uppercase, lowercase, and numbers", errorResult.message)
             awaitComplete()
         }
     }
@@ -134,7 +134,7 @@ class SignInUseCaseTest {
     fun `should trim username before validation and repository call`() = runTest {
         // Given
         val username = "  testuser  "
-        val password = "password123"
+        val password = "Password123"
         coEvery { authRepository.signIn("testuser", password) } returns AuthResult.Success(mockUser)
 
         // When & Then
@@ -149,7 +149,7 @@ class SignInUseCaseTest {
     fun `should handle repository exception gracefully`() = runTest {
         // Given
         val username = "testuser"
-        val password = "password123"
+        val password = "Password123"
         val exception = RuntimeException("Network error")
         coEvery { authRepository.signIn(username, password) } throws exception
 
