@@ -313,29 +313,6 @@ private fun LoginFormSection(
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Demo credentials info
-            IndustrialCard(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Demo Credentials",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "• admin / admin123 (Administrator)\n• supervisor / super123 (Supervisor)\n• operator / oper123 (Operator)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
         }
     }
 }

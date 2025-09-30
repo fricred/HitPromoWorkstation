@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import net.hitpromo.hitpromoworkstation.data.local.UserPreferences
 import net.hitpromo.hitpromoworkstation.data.remote.CognitoAuthDataSource
 import net.hitpromo.hitpromoworkstation.domain.model.AuthResult
@@ -30,6 +32,12 @@ class AuthRepositoryImpl @Inject constructor(
     private val _currentUser = MutableStateFlow<User?>(null)
     override val currentUser: Flow<User?> = _currentUser.asStateFlow()
 
+    /**
+     * Mutex to synchronize state mutations across authentication operations.
+     * Ensures thread-safe access to _currentUser and _authenticationState.
+     */
+    private val authMutex = Mutex()
+
     init {
         // Initialize authentication state from local storage
         initializeAuthState()
@@ -37,15 +45,22 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun signIn(username: String, password: String): AuthResult<User> {
         return try {
-            _authenticationState.value = AuthenticationState.Loading
+            // Use mutex to synchronize state mutations
+            authMutex.withLock {
+                _authenticationState.value = AuthenticationState.Loading
+            }
 
             val result = cognitoDataSource.signIn(username, password)
 
             when (result) {
                 is AuthResult.Success -> {
                     val user = result.data.toDomainModel()
-                    _currentUser.value = user
-                    _authenticationState.value = AuthenticationState.Authenticated(user)
+
+                    // Synchronize state updates
+                    authMutex.withLock {
+                        _currentUser.value = user
+                        _authenticationState.value = AuthenticationState.Authenticated(user)
+                    }
 
                     // Save session to local storage
                     userPreferences.saveUserSession(
@@ -58,7 +73,9 @@ class AuthRepositoryImpl @Inject constructor(
                     AuthResult.Success(user)
                 }
                 is AuthResult.Error -> {
-                    _authenticationState.value = AuthenticationState.Error(result.message, result.cause)
+                    authMutex.withLock {
+                        _authenticationState.value = AuthenticationState.Error(result.message, result.cause)
+                    }
                     AuthResult.Error(result.message, result.cause)
                 }
                 is AuthResult.Loading -> AuthResult.Loading
@@ -66,21 +83,29 @@ class AuthRepositoryImpl @Inject constructor(
 
         } catch (e: Exception) {
             val errorMessage = "Sign-in failed: ${e.message}"
-            _authenticationState.value = AuthenticationState.Error(errorMessage, e)
+            authMutex.withLock {
+                _authenticationState.value = AuthenticationState.Error(errorMessage, e)
+            }
             AuthResult.Error(errorMessage, e)
         }
     }
 
     override suspend fun signOut(): AuthResult<Unit> {
         return try {
-            _authenticationState.value = AuthenticationState.Loading
+            // Use mutex to synchronize state mutations
+            authMutex.withLock {
+                _authenticationState.value = AuthenticationState.Loading
+            }
 
             val result = cognitoDataSource.signOut()
 
             when (result) {
                 is AuthResult.Success -> {
-                    _currentUser.value = null
-                    _authenticationState.value = AuthenticationState.Unauthenticated
+                    // Synchronize state updates
+                    authMutex.withLock {
+                        _currentUser.value = null
+                        _authenticationState.value = AuthenticationState.Unauthenticated
+                    }
 
                     // Clear local session
                     userPreferences.clearUserSession()
@@ -113,13 +138,19 @@ class AuthRepositoryImpl @Inject constructor(
             when (result) {
                 is AuthResult.Success -> {
                     val user = result.data.toDomainModel()
-                    _currentUser.value = user
-                    _authenticationState.value = AuthenticationState.Authenticated(user)
+                    // Synchronize state updates
+                    authMutex.withLock {
+                        _currentUser.value = user
+                        _authenticationState.value = AuthenticationState.Authenticated(user)
+                    }
                     AuthResult.Success(user)
                 }
                 is AuthResult.Error -> {
-                    _currentUser.value = null
-                    _authenticationState.value = AuthenticationState.Error(result.message, result.cause)
+                    // Synchronize state updates
+                    authMutex.withLock {
+                        _currentUser.value = null
+                        _authenticationState.value = AuthenticationState.Error(result.message, result.cause)
+                    }
                     userPreferences.clearUserSession()
                     AuthResult.Error(result.message, result.cause)
                 }
@@ -134,16 +165,17 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun validateSession(): Boolean {
         return try {
             if (cognitoDataSource.validateSession()) {
-                // Validate against local storage as well
-                val isLoggedIn = userPreferences.isLoggedIn.first()
-                val hasUserId = userPreferences.userId.first() != null
+                // Validate against local storage - use combine to collect atomically
+                val (isLoggedIn, userId) = userPreferences.isLoggedIn
+                    .combine(userPreferences.userId) { loggedIn, id -> loggedIn to id }
+                    .first()
 
-                if (isLoggedIn && hasUserId && _currentUser.value == null) {
+                if (isLoggedIn && userId != null && _currentUser.value == null) {
                     // Restore user from local storage
                     restoreUserFromPreferences()
                 }
 
-                isLoggedIn && hasUserId
+                isLoggedIn && userId != null
             } else {
                 false
             }
@@ -189,14 +221,20 @@ class AuthRepositoryImpl @Inject constructor(
                     lastLoginTime = lastLoginTime
                 )
 
-                _currentUser.value = user
-                _authenticationState.value = AuthenticationState.Authenticated(user)
+                // Synchronize state updates
+                authMutex.withLock {
+                    _currentUser.value = user
+                    _authenticationState.value = AuthenticationState.Authenticated(user)
+                }
             }
         } catch (e: Exception) {
             // If restoration fails, clear the session
             userPreferences.clearUserSession()
-            _currentUser.value = null
-            _authenticationState.value = AuthenticationState.Unauthenticated
+            // Synchronize state updates
+            authMutex.withLock {
+                _currentUser.value = null
+                _authenticationState.value = AuthenticationState.Unauthenticated
+            }
         }
     }
 }

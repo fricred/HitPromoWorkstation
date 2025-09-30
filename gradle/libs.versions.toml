@@ -16,8 +16,8 @@ hiltNavigationCompose = "1.2.0"
 # KSP
 ksp = "2.1.0-1.0.29"
 
-# AWS
-awsSdk = "2.30.1"
+# AWS Amplify
+amplify = "2.30.1"
 
 # Architecture Components
 viewModelCompose = "2.8.6"
@@ -74,10 +74,10 @@ hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 
-# AWS SDK
-aws-core = { group = "com.amplifyframework", name = "core", version.ref = "awsSdk" }
-aws-auth-cognito = { group = "com.amplifyframework", name = "aws-auth-cognito", version.ref = "awsSdk" }
-aws-storage-s3 = { group = "com.amplifyframework", name = "aws-storage-s3", version.ref = "awsSdk" }
+# AWS Amplify
+amplify-core = { group = "com.amplifyframework", name = "core", version.ref = "amplify" }
+amplify-auth-cognito = { group = "com.amplifyframework", name = "aws-auth-cognito", version.ref = "amplify" }
+amplify-storage-s3 = { group = "com.amplifyframework", name = "aws-storage-s3", version.ref = "amplify" }
 
 # Camera
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camera" }

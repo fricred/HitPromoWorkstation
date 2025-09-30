@@ -1,3 +1,53 @@
 <resources>
     <string name="app_name">Hit Promo Workstation</string>
+
+    <!-- Authentication Error Messages -->
+    <string name="error_network_unavailable">No network connection. Please check your internet connection and try again.</string>
+    <string name="error_authentication_failed">Authentication failed. Please try again.</string>
+    <string name="error_invalid_credentials">Invalid username or password</string>
+    <string name="error_user_not_found">User not found</string>
+    <string name="error_email_not_verified">Email not verified. Please verify your email first</string>
+    <string name="error_invalid_parameter">Invalid username or password format</string>
+    <string name="error_fetch_user_attributes">Failed to fetch user attributes</string>
+    <string name="error_fetch_current_user">Failed to fetch current user attributes</string>
+    <string name="error_sign_in_unknown">Sign-in failed with unknown error</string>
+    <string name="error_sign_out_failed">Sign-out failed: %s</string>
+    <string name="error_session_expired">Session expired or invalid</string>
+    <string name="error_session_validation_failed">Session validation failed: %s</string>
+    <string name="error_session_refresh_failed">Session refresh failed: %s</string>
+    <string name="error_no_active_session">No active session</string>
+    <string name="error_unexpected">An unexpected error occurred</string>
+
+    <!-- Additional Step Messages -->
+    <string name="error_change_password_required">Please change your password. Contact your administrator for assistance.</string>
+    <string name="error_custom_challenge_required">Additional authentication challenge required.</string>
+    <string name="error_sms_mfa_required">Please enter the SMS code sent to your phone.</string>
+    <string name="error_totp_required">Please enter your authenticator code.</string>
+    <string name="error_mfa_selection_required">Please select your MFA method.</string>
+    <string name="error_totp_setup_required">Please set up your authenticator app.</string>
+    <string name="error_confirm_sign_up_required">Please verify your email address.</string>
+    <string name="error_reset_password_required">Password reset required.</string>
+    <string name="error_additional_steps_required">Sign-in requires additional steps: %s. Please contact your administrator.</string>
+
+    <!-- Validation Error Messages -->
+    <string name="error_username_empty">Username cannot be empty</string>
+    <string name="error_password_empty">Password cannot be empty</string>
+    <string name="error_username_too_short">Username must be at least 3 characters</string>
+    <string name="error_password_too_short">Password must be at least 8 characters</string>
+    <string name="error_password_no_uppercase">Password must contain at least one uppercase letter</string>
+    <string name="error_password_no_lowercase">Password must contain at least one lowercase letter</string>
+    <string name="error_password_no_digit">Password must contain at least one number</string>
+    <string name="error_password_weak">Password must be at least 8 characters and contain uppercase, lowercase, and numbers</string>
+
+    <!-- Amplify Initialization Messages -->
+    <string name="error_amplify_init_failed">Failed to initialize AWS Amplify</string>
+    <string name="error_amplify_config_missing">AWS Amplify configuration file not found</string>
+    <string name="error_amplify_not_configured">AWS Amplify is not configured. Authentication unavailable.</string>
+
+    <!-- Operation Timeout Messages -->
+    <string name="error_operation_timeout">Operation timed out. Please try again.</string>
+    <string name="error_sign_in_timeout">Sign-in operation timed out</string>
+
+    <!-- Forgot Password -->
+    <string name="message_forgot_password">Please contact your system administrator for password reset assistance.</string>
 </resources>

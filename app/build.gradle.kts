@@ -78,10 +78,10 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
 
-    // AWS SDK
-    implementation(libs.aws.core)
-    implementation(libs.aws.auth.cognito)
-    implementation(libs.aws.storage.s3)
+    // AWS Amplify
+    implementation(libs.amplify.core)
+    implementation(libs.amplify.auth.cognito)
+    implementation(libs.amplify.storage.s3)
 
     // Camera
     implementation(libs.androidx.camera.core)

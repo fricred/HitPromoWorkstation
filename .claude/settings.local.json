@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:docs.amplify.aws)",
+      "Bash(./gradlew build:*)",
+      "Bash(bash gradlew build --stacktrace)",
+      "Bash(dos2unix:*)",
+      "Bash(chmod:*)",
+      "Bash(./gradlew:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:medium.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
