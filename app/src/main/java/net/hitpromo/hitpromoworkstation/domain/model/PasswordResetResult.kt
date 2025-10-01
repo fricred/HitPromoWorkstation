@@ -69,6 +69,11 @@ enum class PasswordResetErrorType {
     INVALID_PASSWORD,
 
     /**
+     * Invalid input (username, code, etc.).
+     */
+    INVALID_INPUT,
+
+    /**
      * Network connectivity issue.
      */
     NETWORK_ERROR,

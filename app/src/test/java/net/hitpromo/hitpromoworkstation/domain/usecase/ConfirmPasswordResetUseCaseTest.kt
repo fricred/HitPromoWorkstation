@@ -74,7 +74,7 @@ class ConfirmPasswordResetUseCaseTest {
             assertEquals(PasswordResetResult.Loading, awaitItem())
             val errorResult = awaitItem() as PasswordResetResult.Error
             assertEquals("Username cannot be empty", errorResult.message)
-            assertEquals(PasswordResetErrorType.INVALID_PASSWORD, errorResult.errorType)
+            assertEquals(PasswordResetErrorType.INVALID_INPUT, errorResult.errorType)
             awaitComplete()
         }
 
@@ -305,7 +305,7 @@ class ConfirmPasswordResetUseCaseTest {
             assertEquals(PasswordResetResult.Loading, awaitItem())
             val errorResult = awaitItem() as PasswordResetResult.Error
             assertEquals("Username must be at least 3 characters", errorResult.message)
-            assertEquals(PasswordResetErrorType.INVALID_PASSWORD, errorResult.errorType)
+            assertEquals(PasswordResetErrorType.INVALID_INPUT, errorResult.errorType)
             awaitComplete()
         }
 

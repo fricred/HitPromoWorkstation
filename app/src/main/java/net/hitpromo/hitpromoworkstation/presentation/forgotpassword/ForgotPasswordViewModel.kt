@@ -9,10 +9,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import net.hitpromo.hitpromoworkstation.R
 import net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType
 import net.hitpromo.hitpromoworkstation.domain.model.PasswordResetResult
+import net.hitpromo.hitpromoworkstation.domain.usecase.ConfirmNewPasswordUseCase
 import net.hitpromo.hitpromoworkstation.domain.usecase.ConfirmPasswordResetUseCase
 import net.hitpromo.hitpromoworkstation.domain.usecase.RequestPasswordResetUseCase
+import net.hitpromo.hitpromoworkstation.util.StringProvider
 import javax.inject.Inject
 
 /**
@@ -28,7 +31,9 @@ import javax.inject.Inject
 @HiltViewModel
 class ForgotPasswordViewModel @Inject constructor(
     private val requestPasswordResetUseCase: RequestPasswordResetUseCase,
-    private val confirmPasswordResetUseCase: ConfirmPasswordResetUseCase
+    private val confirmPasswordResetUseCase: ConfirmPasswordResetUseCase,
+    private val confirmNewPasswordUseCase: ConfirmNewPasswordUseCase,
+    private val stringProvider: StringProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ForgotPasswordUiState.Initial)
@@ -79,7 +84,7 @@ class ForgotPasswordViewModel @Inject constructor(
             // Validate username
             if (username.isBlank()) {
                 _uiState.value = ForgotPasswordUiState.Error(
-                    message = "Username cannot be empty",
+                    message = stringProvider.getString(R.string.error_username_empty),
                     currentState = _uiState.value
                 )
                 return@launch
@@ -89,7 +94,7 @@ class ForgotPasswordViewModel @Inject constructor(
                 .catch { exception ->
                     Log.e(TAG, "Password reset request flow error", exception)
                     emit(PasswordResetResult.Error(
-                        message = "Failed to request password reset: ${exception.message ?: "Unknown error"}",
+                        message = stringProvider.getString(R.string.error_password_reset_failed),
                         errorType = PasswordResetErrorType.UNKNOWN,
                         cause = exception
                     ))
@@ -134,7 +139,7 @@ class ForgotPasswordViewModel @Inject constructor(
             // Validate inputs
             if (code.isBlank()) {
                 _uiState.value = ForgotPasswordUiState.Error(
-                    message = "Verification code cannot be empty",
+                    message = stringProvider.getString(R.string.error_verification_code_empty),
                     currentState = _uiState.value
                 )
                 return@launch
@@ -142,7 +147,7 @@ class ForgotPasswordViewModel @Inject constructor(
 
             if (password.isBlank()) {
                 _uiState.value = ForgotPasswordUiState.Error(
-                    message = "Password cannot be empty",
+                    message = stringProvider.getString(R.string.error_password_empty),
                     currentState = _uiState.value
                 )
                 return@launch
@@ -150,15 +155,17 @@ class ForgotPasswordViewModel @Inject constructor(
 
             if (password != confirmPassword) {
                 _uiState.value = ForgotPasswordUiState.Error(
-                    message = "Passwords do not match",
+                    message = stringProvider.getString(R.string.error_passwords_not_match),
                     currentState = _uiState.value
                 )
                 return@launch
             }
 
-            if (password.length < 8) {
+            // Validate password using comprehensive validation
+            val passwordValidationError = confirmNewPasswordUseCase.validatePassword(password)
+            if (passwordValidationError != null) {
                 _uiState.value = ForgotPasswordUiState.Error(
-                    message = "Password must be at least 8 characters",
+                    message = passwordValidationError,
                     currentState = _uiState.value
                 )
                 return@launch
@@ -167,7 +174,7 @@ class ForgotPasswordViewModel @Inject constructor(
             val username = _uiState.value.username
             if (username.isBlank()) {
                 _uiState.value = ForgotPasswordUiState.Error(
-                    message = "Username not found. Please restart the process.",
+                    message = stringProvider.getString(R.string.error_username_not_found),
                     currentState = _uiState.value
                 )
                 return@launch
@@ -177,7 +184,7 @@ class ForgotPasswordViewModel @Inject constructor(
                 .catch { exception ->
                     Log.e(TAG, "Password reset confirmation flow error", exception)
                     emit(PasswordResetResult.Error(
-                        message = "Failed to confirm password reset: ${exception.message ?: "Unknown error"}",
+                        message = stringProvider.getString(R.string.error_password_reset_failed),
                         errorType = PasswordResetErrorType.UNKNOWN,
                         cause = exception
                     ))
@@ -214,9 +221,10 @@ class ForgotPasswordViewModel @Inject constructor(
     private fun navigateBack() {
         when (_uiState.value.currentStep) {
             ForgotPasswordStep.VERIFY_CODE -> {
-                // Go back to username entry, but clear any messages
+                // Go back to username entry, but clear any messages and delivery destination
                 _uiState.value = _uiState.value.copy(
                     currentStep = ForgotPasswordStep.ENTER_USERNAME,
+                    deliveryDestination = null,
                     errorMessage = null,
                     successMessage = null
                 )
@@ -241,7 +249,7 @@ class ForgotPasswordViewModel @Inject constructor(
         val username = _uiState.value.username
         if (username.isBlank()) {
             _uiState.value = ForgotPasswordUiState.Error(
-                message = "Username not found. Please restart the process.",
+                message = stringProvider.getString(R.string.error_username_not_found),
                 currentState = _uiState.value
             )
             return

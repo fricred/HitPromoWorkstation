@@ -10,10 +10,13 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import net.hitpromo.hitpromoworkstation.R
 import net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType
 import net.hitpromo.hitpromoworkstation.domain.model.PasswordResetResult
+import net.hitpromo.hitpromoworkstation.domain.usecase.ConfirmNewPasswordUseCase
 import net.hitpromo.hitpromoworkstation.domain.usecase.ConfirmPasswordResetUseCase
 import net.hitpromo.hitpromoworkstation.domain.usecase.RequestPasswordResetUseCase
+import net.hitpromo.hitpromoworkstation.util.StringProvider
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,6 +36,8 @@ class ForgotPasswordViewModelTest {
 
     private lateinit var requestPasswordResetUseCase: RequestPasswordResetUseCase
     private lateinit var confirmPasswordResetUseCase: ConfirmPasswordResetUseCase
+    private lateinit var confirmNewPasswordUseCase: ConfirmNewPasswordUseCase
+    private lateinit var stringProvider: StringProvider
     private lateinit var viewModel: ForgotPasswordViewModel
 
     private val testDispatcher = StandardTestDispatcher()
@@ -42,9 +47,26 @@ class ForgotPasswordViewModelTest {
         Dispatchers.setMain(testDispatcher)
         requestPasswordResetUseCase = mockk()
         confirmPasswordResetUseCase = mockk()
+        confirmNewPasswordUseCase = mockk()
+        stringProvider = mockk()
+
+        // Set up default string provider responses
+        every { stringProvider.getString(R.string.error_username_empty) } returns "Username cannot be empty"
+        every { stringProvider.getString(R.string.error_password_empty) } returns "Password cannot be empty"
+        every { stringProvider.getString(R.string.error_passwords_not_match) } returns "Passwords do not match"
+        every { stringProvider.getString(R.string.error_password_too_short) } returns "Password must be at least 8 characters"
+        every { stringProvider.getString(R.string.error_verification_code_empty) } returns "Verification code cannot be empty"
+        every { stringProvider.getString(R.string.error_username_not_found) } returns "Username not found. Please restart the process."
+        every { stringProvider.getString(R.string.error_password_reset_failed) } returns "Password reset failed. Please try again."
+
+        // Set up default password validation to return null (valid password)
+        every { confirmNewPasswordUseCase.validatePassword(any()) } returns null
+
         viewModel = ForgotPasswordViewModel(
             requestPasswordResetUseCase,
-            confirmPasswordResetUseCase
+            confirmPasswordResetUseCase,
+            confirmNewPasswordUseCase,
+            stringProvider
         )
     }
 
@@ -276,9 +298,10 @@ class ForgotPasswordViewModelTest {
             // Navigate back
             viewModel.handleIntent(ForgotPasswordIntent.NavigateBack)
 
-            // Expect back to ENTER_USERNAME
+            // Expect back to ENTER_USERNAME with deliveryDestination cleared
             val navigatedState = awaitItem()
             assertEquals(ForgotPasswordStep.ENTER_USERNAME, navigatedState.currentStep)
+            assertNull(navigatedState.deliveryDestination)
             assertNull(navigatedState.errorMessage)
             assertNull(navigatedState.successMessage)
 
@@ -445,10 +468,16 @@ class ForgotPasswordViewModelTest {
         // Given
         val username = "testuser"
         val deliveryDestination = "t***@example.com"
+        val shortPassword = "Pass1"
+        val passwordError = "Password must be at least 8 characters long"
+
         every { requestPasswordResetUseCase(username) } returns flowOf(
             PasswordResetResult.Loading,
             PasswordResetResult.CodeSent(deliveryDestination)
         )
+
+        // Mock password validation to return error for short password
+        every { confirmNewPasswordUseCase.validatePassword(shortPassword) } returns passwordError
 
         // When & Then
         viewModel.uiState.test {
@@ -462,13 +491,13 @@ class ForgotPasswordViewModelTest {
 
             // Try to confirm with short password
             viewModel.handleIntent(
-                ForgotPasswordIntent.ConfirmPasswordReset("123456", "Pass1", "Pass1")
+                ForgotPasswordIntent.ConfirmPasswordReset("123456", shortPassword, shortPassword)
             )
             testDispatcher.scheduler.advanceUntilIdle()
 
             // Expect error state
             val errorState = awaitItem()
-            assertEquals("Password must be at least 8 characters", errorState.errorMessage)
+            assertEquals(passwordError, errorState.errorMessage)
 
             cancelAndIgnoreRemainingEvents()
         }

@@ -28,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,9 +96,16 @@ fun ForgotPasswordScreen(
     // Auto-navigate after successful password reset
     LaunchedEffect(uiState.currentStep) {
         if (uiState.currentStep == ForgotPasswordStep.SUCCESS) {
-            delay(3000) // Show success message for 3 seconds
-            viewModel.handleIntent(ForgotPasswordIntent.ReturnToLogin)
-            onComplete()
+            try {
+                delay(3000) // Show success message for 3 seconds
+                // Only navigate if still in SUCCESS step (not disposed)
+                if (uiState.currentStep == ForgotPasswordStep.SUCCESS) {
+                    viewModel.handleIntent(ForgotPasswordIntent.ReturnToLogin)
+                    onComplete()
+                }
+            } catch (e: Exception) {
+                // LaunchedEffect was cancelled, do nothing
+            }
         }
     }
 
@@ -311,7 +319,7 @@ private fun EnterUsernameStep(
     onIntent: (ForgotPasswordIntent) -> Unit,
     onCancel: () -> Unit
 ) {
-    var username by remember { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
 
     Column(
@@ -426,11 +434,11 @@ private fun VerifyCodeAndPasswordStep(
     uiState: net.hitpromo.hitpromoworkstation.presentation.forgotpassword.ForgotPasswordUiState,
     onIntent: (ForgotPasswordIntent) -> Unit
 ) {
-    var verificationCode by remember { mutableStateOf("") }
-    var newPassword by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var isNewPasswordVisible by remember { mutableStateOf(false) }
-    var isConfirmPasswordVisible by remember { mutableStateOf(false) }
+    var verificationCode by rememberSaveable { mutableStateOf("") }
+    var newPassword by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var isNewPasswordVisible by rememberSaveable { mutableStateOf(false) }
+    var isConfirmPasswordVisible by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
     // Calculate password strength

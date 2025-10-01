@@ -60,11 +60,11 @@ class RequestPasswordResetUseCase @Inject constructor(
         return when {
             username.isBlank() -> PasswordResetResult.Error(
                 message = "Username cannot be empty",
-                errorType = PasswordResetErrorType.INVALID_PASSWORD
+                errorType = PasswordResetErrorType.INVALID_INPUT
             )
             username.length < MIN_USERNAME_LENGTH -> PasswordResetResult.Error(
                 message = "Username must be at least $MIN_USERNAME_LENGTH characters",
-                errorType = PasswordResetErrorType.INVALID_PASSWORD
+                errorType = PasswordResetErrorType.INVALID_INPUT
             )
             else -> null
         }

@@ -54,6 +54,9 @@
     <string name="error_code_expired">Verification code has expired. Please request a new one.</string>
     <string name="error_rate_limit_exceeded">Too many attempts. Please wait before trying again.</string>
     <string name="error_invalid_username">Invalid username format.</string>
+    <string name="error_verification_code_empty">Verification code cannot be empty</string>
+    <string name="error_username_not_found">Username not found. Please restart the process.</string>
+    <string name="error_password_no_special_char">Password must contain at least one special character</string>
 
     <!-- Forgot Password UI Strings -->
     <string name="forgot_password_title">Forgot Password</string>
