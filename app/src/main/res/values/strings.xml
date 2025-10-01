@@ -48,7 +48,25 @@
     <string name="error_operation_timeout">Operation timed out. Please try again.</string>
     <string name="error_sign_in_timeout">Sign-in operation timed out</string>
 
-    <!-- Forgot Password -->
+    <!-- Forgot Password Error Messages -->
+    <string name="error_password_reset_failed">Password reset failed. Please try again.</string>
+    <string name="error_invalid_verification_code">Invalid verification code. Please check and try again.</string>
+    <string name="error_code_expired">Verification code has expired. Please request a new one.</string>
+    <string name="error_rate_limit_exceeded">Too many attempts. Please wait before trying again.</string>
+    <string name="error_invalid_username">Invalid username format.</string>
+    <string name="error_verification_code_empty">Verification code cannot be empty</string>
+    <string name="error_username_not_found">Username not found. Please restart the process.</string>
+    <string name="error_password_no_special_char">Password must contain at least one special character</string>
+
+    <!-- Forgot Password UI Strings -->
+    <string name="forgot_password_title">Forgot Password</string>
+    <string name="forgot_password_instructions">Enter your username and we\'ll send you a verification code to reset your password.</string>
+    <string name="verification_code_label">Verification Code</string>
+    <string name="verification_code_sent">A verification code has been sent to %s</string>
+    <string name="resend_code">Resend Code</string>
+    <string name="password_reset_success">Password has been reset successfully!</string>
+
+    <!-- Forgot Password (Legacy Message) -->
     <string name="message_forgot_password">Please contact your system administrator for password reset assistance.</string>
 
     <!-- Password Change Screen -->

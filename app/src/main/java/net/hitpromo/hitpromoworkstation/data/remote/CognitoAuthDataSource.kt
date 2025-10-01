@@ -26,6 +26,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import net.hitpromo.hitpromoworkstation.data.remote.dto.CognitoUserDto
 import net.hitpromo.hitpromoworkstation.domain.model.AuthResult
+import net.hitpromo.hitpromoworkstation.domain.model.PasswordResetResult
 import net.hitpromo.hitpromoworkstation.util.NetworkMonitor
 import net.hitpromo.hitpromoworkstation.util.StringProvider
 import javax.inject.Inject
@@ -1078,6 +1079,365 @@ class CognitoAuthDataSource @Inject constructor(
 
         if (expiredSessions.isNotEmpty()) {
             Log.i(TAG, "Cleaned up ${expiredSessions.size} expired password change sessions")
+        }
+    }
+
+    /**
+     * Request a password reset for the given username.
+     *
+     * Initiates the password reset flow by sending a verification code to the user's
+     * registered email or phone number.
+     *
+     * @param username The username for which to request a password reset
+     * @return PasswordResetResult indicating success (with delivery destination) or failure
+     */
+    suspend fun requestPasswordReset(username: String): PasswordResetResult {
+        return try {
+            // Validate input
+            if (username.isBlank()) {
+                return PasswordResetResult.Error(
+                    message = stringProvider.getString(R.string.error_username_empty),
+                    errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.UNKNOWN
+                )
+            }
+
+            // Check network connectivity
+            if (!networkMonitor.isNetworkAvailable()) {
+                return PasswordResetResult.Error(
+                    message = stringProvider.getString(R.string.error_network_unavailable),
+                    errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.NETWORK_ERROR
+                )
+            }
+
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "Requesting password reset for user: $username")
+            } else {
+                Log.d(TAG, "Requesting password reset")
+            }
+
+            // Generate unique call ID for tracking
+            val callId = UUID.randomUUID().toString()
+            activeCalls.add(callId)
+
+            // Perform Cognito resetPassword with timeout
+            val resetResult = withTimeout(AUTH_TIMEOUT_MS) {
+                suspendCancellableCoroutine<Pair<Any?, AuthException?>> { continuation ->
+                    val resetCall = Amplify.Auth.resetPassword(
+                        username,
+                        { result ->
+                            // Check if this call is still active before processing result
+                            if (activeCalls.contains(callId)) {
+                                if (BuildConfig.DEBUG) {
+                                    Log.d(TAG, "Password reset request successful for user: $username")
+                                } else {
+                                    Log.d(TAG, "Password reset request successful")
+                                }
+                                if (continuation.isActive) {
+                                    continuation.resume(Pair(result, null))
+                                }
+                            } else {
+                                Log.d(TAG, "Ignoring password reset result for cancelled call")
+                            }
+                        },
+                        { error ->
+                            // Check if this call is still active before processing error
+                            if (activeCalls.contains(callId)) {
+                                if (BuildConfig.DEBUG) {
+                                    Log.e(TAG, "Password reset request failed for user: $username", error)
+                                } else {
+                                    Log.e(TAG, "Password reset request failed", error)
+                                }
+                                if (continuation.isActive) {
+                                    continuation.resume(Pair(null, error))
+                                }
+                            } else {
+                                Log.d(TAG, "Ignoring password reset error for cancelled call")
+                            }
+                        }
+                    )
+
+                    continuation.invokeOnCancellation {
+                        // Remove from active calls to prevent processing results
+                        activeCalls.remove(callId)
+                        if (BuildConfig.DEBUG) {
+                            Log.w(TAG, "Password reset request cancelled for user: $username")
+                        } else {
+                            Log.w(TAG, "Password reset request cancelled")
+                        }
+                    }
+                }
+            }
+
+            // Clean up call tracking after successful completion
+            activeCalls.remove(callId)
+
+            // Check if there was an error
+            val error = resetResult.second
+            if (error != null) {
+                throw error
+            }
+
+            val result = resetResult.first
+            if (result != null) {
+                when (result) {
+                    is com.amplifyframework.auth.result.AuthResetPasswordResult -> {
+                        // Extract delivery details from result
+                        val nextStep = result.nextStep
+                        val codeDeliveryDetails = nextStep.codeDeliveryDetails
+
+                        val deliveryDestination = codeDeliveryDetails?.destination ?: "your registered contact"
+
+                        if (BuildConfig.DEBUG) {
+                            Log.d(TAG, "Password reset code sent to: $deliveryDestination")
+                        } else {
+                            Log.d(TAG, "Password reset code sent")
+                        }
+
+                        PasswordResetResult.CodeSent(deliveryDestination = deliveryDestination)
+                    }
+                    else -> {
+                        Log.e(TAG, "Unexpected result type: ${result::class.java.simpleName}")
+                        PasswordResetResult.Error(
+                            message = stringProvider.getString(R.string.error_password_reset_failed),
+                            errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.UNKNOWN
+                        )
+                    }
+                }
+            } else {
+                PasswordResetResult.Error(
+                    message = stringProvider.getString(R.string.error_password_reset_failed),
+                    errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.UNKNOWN
+                )
+            }
+
+        } catch (e: AuthException) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Password reset request authentication error", e)
+            } else {
+                Log.e(TAG, "Password reset request authentication error", e)
+            }
+
+            // Map AWS Cognito exceptions to PasswordResetErrorType
+            val (errorMessage, errorType) = when {
+                e.message?.contains("UserNotFoundException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_user_not_found) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.USER_NOT_FOUND
+                e.message?.contains("LimitExceededException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_rate_limit_exceeded) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.LIMIT_EXCEEDED
+                e.message?.contains("InvalidParameterException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_invalid_username) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.UNKNOWN
+                else ->
+                    stringProvider.getString(R.string.error_password_reset_failed) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.UNKNOWN
+            }
+            PasswordResetResult.Error(message = errorMessage, errorType = errorType, cause = e)
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Password reset request timeout", e)
+            } else {
+                Log.e(TAG, "Password reset request timeout", e)
+            }
+            PasswordResetResult.Error(
+                message = stringProvider.getString(R.string.error_operation_timeout),
+                errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.NETWORK_ERROR,
+                cause = e
+            )
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Unexpected error during password reset request", e)
+            } else {
+                Log.e(TAG, "Unexpected error during password reset request", e)
+            }
+            PasswordResetResult.Error(
+                message = stringProvider.getString(R.string.error_network_unavailable),
+                errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.NETWORK_ERROR,
+                cause = e
+            )
+        }
+    }
+
+    /**
+     * Confirm password reset with verification code and new password.
+     *
+     * Completes the password reset flow by validating the verification code and
+     * setting the new password.
+     *
+     * @param username The username for which to reset the password
+     * @param verificationCode The code received via email/SMS
+     * @param newPassword The new password to set
+     * @return PasswordResetResult indicating success or failure
+     */
+    suspend fun confirmPasswordReset(
+        username: String,
+        verificationCode: String,
+        newPassword: String
+    ): PasswordResetResult {
+        return try {
+            // Validate inputs
+            if (username.isBlank()) {
+                return PasswordResetResult.Error(
+                    message = stringProvider.getString(R.string.error_username_empty),
+                    errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.UNKNOWN
+                )
+            }
+
+            if (verificationCode.isBlank()) {
+                return PasswordResetResult.Error(
+                    message = stringProvider.getString(R.string.error_invalid_verification_code),
+                    errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.INVALID_CODE
+                )
+            }
+
+            if (newPassword.isBlank()) {
+                return PasswordResetResult.Error(
+                    message = stringProvider.getString(R.string.error_password_empty),
+                    errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.INVALID_PASSWORD
+                )
+            }
+
+            // Check network connectivity
+            if (!networkMonitor.isNetworkAvailable()) {
+                return PasswordResetResult.Error(
+                    message = stringProvider.getString(R.string.error_network_unavailable),
+                    errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.NETWORK_ERROR
+                )
+            }
+
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "Confirming password reset for user: $username")
+            } else {
+                Log.d(TAG, "Confirming password reset")
+            }
+
+            // Generate unique call ID for tracking
+            val callId = UUID.randomUUID().toString()
+            activeCalls.add(callId)
+
+            // Perform Cognito confirmResetPassword with timeout
+            val confirmResult = withTimeout(AUTH_TIMEOUT_MS) {
+                suspendCancellableCoroutine<Pair<Unit?, AuthException?>> { continuation ->
+                    val confirmCall = Amplify.Auth.confirmResetPassword(
+                        username,
+                        newPassword,
+                        verificationCode,
+                        {
+                            // Check if this call is still active before processing result
+                            if (activeCalls.contains(callId)) {
+                                if (BuildConfig.DEBUG) {
+                                    Log.d(TAG, "Password reset confirmed successfully for user: $username")
+                                } else {
+                                    Log.d(TAG, "Password reset confirmed successfully")
+                                }
+                                if (continuation.isActive) {
+                                    continuation.resume(Pair(Unit, null))
+                                }
+                            } else {
+                                Log.d(TAG, "Ignoring password reset confirmation result for cancelled call")
+                            }
+                        },
+                        { error ->
+                            // Check if this call is still active before processing error
+                            if (activeCalls.contains(callId)) {
+                                if (BuildConfig.DEBUG) {
+                                    Log.e(TAG, "Password reset confirmation failed for user: $username", error)
+                                } else {
+                                    Log.e(TAG, "Password reset confirmation failed", error)
+                                }
+                                if (continuation.isActive) {
+                                    continuation.resume(Pair(null, error))
+                                }
+                            } else {
+                                Log.d(TAG, "Ignoring password reset confirmation error for cancelled call")
+                            }
+                        }
+                    )
+
+                    continuation.invokeOnCancellation {
+                        // Remove from active calls to prevent processing results
+                        activeCalls.remove(callId)
+                        if (BuildConfig.DEBUG) {
+                            Log.w(TAG, "Password reset confirmation cancelled for user: $username")
+                        } else {
+                            Log.w(TAG, "Password reset confirmation cancelled")
+                        }
+                    }
+                }
+            }
+
+            // Clean up call tracking after successful completion
+            activeCalls.remove(callId)
+
+            // Check if there was an error
+            val error = confirmResult.second
+            if (error != null) {
+                throw error
+            }
+
+            // Success - password has been reset
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "Password reset completed for user: $username")
+            } else {
+                Log.d(TAG, "Password reset completed")
+            }
+
+            PasswordResetResult.ResetComplete
+
+        } catch (e: AuthException) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Password reset confirmation authentication error", e)
+            } else {
+                Log.e(TAG, "Password reset confirmation authentication error", e)
+            }
+
+            // Map AWS Cognito exceptions to PasswordResetErrorType
+            val (errorMessage, errorType) = when {
+                e.message?.contains("CodeMismatchException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_invalid_verification_code) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.INVALID_CODE
+                e.message?.contains("ExpiredCodeException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_code_expired) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.CODE_EXPIRED
+                e.message?.contains("UserNotFoundException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_user_not_found) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.USER_NOT_FOUND
+                e.message?.contains("LimitExceededException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_rate_limit_exceeded) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.LIMIT_EXCEEDED
+                e.message?.contains("InvalidPasswordException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_password_weak) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.INVALID_PASSWORD
+                e.message?.contains("InvalidParameterException", ignoreCase = true) == true ->
+                    stringProvider.getString(R.string.error_invalid_parameter) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.UNKNOWN
+                else ->
+                    stringProvider.getString(R.string.error_password_reset_failed) to
+                        net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.UNKNOWN
+            }
+            PasswordResetResult.Error(message = errorMessage, errorType = errorType, cause = e)
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Password reset confirmation timeout", e)
+            } else {
+                Log.e(TAG, "Password reset confirmation timeout", e)
+            }
+            PasswordResetResult.Error(
+                message = stringProvider.getString(R.string.error_operation_timeout),
+                errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.NETWORK_ERROR,
+                cause = e
+            )
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "Unexpected error during password reset confirmation", e)
+            } else {
+                Log.e(TAG, "Unexpected error during password reset confirmation", e)
+            }
+            PasswordResetResult.Error(
+                message = stringProvider.getString(R.string.error_network_unavailable),
+                errorType = net.hitpromo.hitpromoworkstation.domain.model.PasswordResetErrorType.NETWORK_ERROR,
+                cause = e
+            )
         }
     }
 
