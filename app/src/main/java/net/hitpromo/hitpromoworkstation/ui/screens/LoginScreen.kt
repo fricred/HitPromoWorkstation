@@ -1,5 +1,7 @@
 package net.hitpromo.hitpromoworkstation.ui.screens
 
+import android.content.res.Configuration
+import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -29,9 +31,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.hitpromo.hitpromoworkstation.BuildConfig
 import net.hitpromo.hitpromoworkstation.presentation.components.IndustrialButton
 import net.hitpromo.hitpromoworkstation.presentation.components.IndustrialCard
 import net.hitpromo.hitpromoworkstation.presentation.components.IndustrialOutlinedButton
@@ -104,6 +109,19 @@ fun LoginScreen(
 private fun BrandingSection(
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+
+    // Get actual system information
+    val appVersion = BuildConfig.VERSION_NAME
+    val buildType = if (BuildConfig.DEBUG) "Development" else "Production"
+    val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
+    val orientation = when (configuration.orientation) {
+        Configuration.ORIENTATION_LANDSCAPE -> "Landscape"
+        Configuration.ORIENTATION_PORTRAIT -> "Portrait"
+        else -> "Unknown"
+    }
+
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.primaryContainer
@@ -167,10 +185,10 @@ private fun BrandingSection(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    SystemInfoRow("Version", "1.0.0")
-                    SystemInfoRow("Environment", "Production")
-                    SystemInfoRow("Device", "Samsung Galaxy Tab A9+")
-                    SystemInfoRow("Orientation", "Landscape")
+                    SystemInfoRow("Version", appVersion)
+                    SystemInfoRow("Environment", buildType)
+                    SystemInfoRow("Device", deviceModel)
+                    SystemInfoRow("Orientation", orientation)
                 }
             }
 
