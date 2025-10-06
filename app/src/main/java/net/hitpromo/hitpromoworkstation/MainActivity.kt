@@ -19,6 +19,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import net.hitpromo.hitpromoworkstation.presentation.login.LoginIntent
 import net.hitpromo.hitpromoworkstation.presentation.login.LoginViewModel
 import net.hitpromo.hitpromoworkstation.ui.components.IndustrialSecondaryButton
+import net.hitpromo.hitpromoworkstation.ui.screens.DashboardScreen
 import net.hitpromo.hitpromoworkstation.ui.screens.ForgotPasswordScreen
 import net.hitpromo.hitpromoworkstation.ui.screens.ForcePasswordChangeScreen
 import net.hitpromo.hitpromoworkstation.ui.screens.LoginScreen
@@ -131,9 +132,8 @@ fun IndustrialWorkstationApp(
         }
         // Show dashboard if authenticated
         else -> {
-            DashboardPlaceholder(
-                user = uiState.user,
-                viewModel = viewModel
+            DashboardScreen(
+                modifier = Modifier.fillMaxSize()
             )
         }
     }
