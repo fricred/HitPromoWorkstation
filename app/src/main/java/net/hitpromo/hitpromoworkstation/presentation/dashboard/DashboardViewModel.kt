@@ -36,7 +36,7 @@ import kotlin.random.Random
 class DashboardViewModel @Inject constructor(
     // TODO: Inject StreamRepository when implemented
     // TODO: Inject SystemMonitorRepository when implemented
-    // For now, we'll use stub data
+    // Note: SignOut is handled by LoginViewModel via callback
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(createInitialState())
@@ -488,14 +488,9 @@ class DashboardViewModel @Inject constructor(
     }
 
     private fun signOut() {
-        Log.d(TAG, "User signing out")
-        // This would typically call AuthRepository.signOut()
-        // For now, just log the action
-        addNotification(
-            title = "Sign Out",
-            message = "Signing out...",
-            severity = NotificationSeverity.INFO
-        )
+        // SignOut is now handled by LoginViewModel via callback passed from MainActivity
+        // This method is kept for the DashboardIntent.SignOut case but does nothing
+        Log.d(TAG, "SignOut intent received - handled by parent navigation")
     }
 
     private fun openSettings() {

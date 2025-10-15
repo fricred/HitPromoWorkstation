@@ -133,6 +133,10 @@ fun IndustrialWorkstationApp(
         // Show dashboard if authenticated
         else -> {
             DashboardScreen(
+                onSignOut = {
+                    // Delegate sign out to LoginViewModel
+                    viewModel.handleIntent(LoginIntent.SignOut)
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }

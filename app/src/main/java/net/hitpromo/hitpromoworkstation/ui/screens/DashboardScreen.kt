@@ -68,12 +68,14 @@ import net.hitpromo.hitpromoworkstation.ui.theme.HitPromoWorkstationTheme
  * - Real-time monitoring of stream, analytics, and system health
  * - Industrial design with high contrast for production floor visibility
  *
+ * @param onSignOut Callback when user signs out (handled by parent navigation)
  * @param viewModel Dashboard ViewModel injected via Hilt
  * @param modifier Optional modifier for the screen
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
+    onSignOut: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel(),
     modifier: Modifier = Modifier
 ) {
@@ -105,7 +107,7 @@ fun DashboardScreen(
                 deviceInfo = uiState.deviceInfo,
                 onRefreshClick = { viewModel.handleIntent(DashboardIntent.RefreshAll) },
                 onSettingsClick = { viewModel.handleIntent(DashboardIntent.OpenSettings) },
-                onLogoutClick = { viewModel.handleIntent(DashboardIntent.SignOut) }
+                onLogoutClick = onSignOut
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -290,24 +292,25 @@ private fun DashboardContent(
 @Composable
 fun DashboardScreenIdlePreview() {
     HitPromoWorkstationTheme {
-        val previewState = DashboardUiState(
-            user = User(
-                id = "user_001",
-                username = "operator_demo",
-                email = "operator@hitpromo.net",
-                role = UserRole.OPERATOR,
-                isActive = true,
-                lastLoginTime = System.currentTimeMillis()
-            ),
-            streamState = StreamState.Idle,
-            streamQuality = null,
-            cameraSettings = CameraSettings.Default,
-            systemHealth = SystemHealth.Default,
-            analyticsSummary = AnalyticsSummary.Empty,
-            deviceInfo = DeviceInfo.getCurrentDevice()
-        )
-
         Surface {
+            // Note: Preview uses DashboardContent directly since DashboardScreen requires ViewModel
+            val previewState = DashboardUiState(
+                user = User(
+                    id = "user_001",
+                    username = "operator_demo",
+                    email = "operator@hitpromo.net",
+                    role = UserRole.OPERATOR,
+                    isActive = true,
+                    lastLoginTime = System.currentTimeMillis()
+                ),
+                streamState = StreamState.Idle,
+                streamQuality = null,
+                cameraSettings = CameraSettings.Default,
+                systemHealth = SystemHealth.Default,
+                analyticsSummary = AnalyticsSummary.Empty,
+                deviceInfo = DeviceInfo.getCurrentDevice()
+            )
+
             DashboardContent(
                 uiState = previewState,
                 onIntent = {}
@@ -325,29 +328,30 @@ fun DashboardScreenIdlePreview() {
 @Composable
 fun DashboardScreenStreamingPreview() {
     HitPromoWorkstationTheme {
-        val previewState = DashboardUiState(
-            user = User(
-                id = "user_001",
-                username = "operator_demo",
-                email = "operator@hitpromo.net",
-                role = UserRole.OPERATOR,
-                isActive = true,
-                lastLoginTime = System.currentTimeMillis()
-            ),
-            streamState = StreamState.Streaming(
-                protocol = StreamProtocol.WEBRTC,
-                quality = net.hitpromo.hitpromoworkstation.domain.model.StreamQuality.Default,
-                startTime = System.currentTimeMillis() - 300000, // 5 minutes ago
-                bytesTransferred = 157_286_400L
-            ),
-            streamQuality = net.hitpromo.hitpromoworkstation.domain.model.StreamQuality.Default,
-            cameraSettings = CameraSettings.Default,
-            systemHealth = SystemHealth.Default,
-            analyticsSummary = AnalyticsSummary.Sample,
-            deviceInfo = DeviceInfo.getCurrentDevice()
-        )
-
         Surface {
+            // Note: Preview uses DashboardContent directly since DashboardScreen requires ViewModel
+            val previewState = DashboardUiState(
+                user = User(
+                    id = "user_001",
+                    username = "operator_demo",
+                    email = "operator@hitpromo.net",
+                    role = UserRole.OPERATOR,
+                    isActive = true,
+                    lastLoginTime = System.currentTimeMillis()
+                ),
+                streamState = StreamState.Streaming(
+                    protocol = StreamProtocol.WEBRTC,
+                    quality = net.hitpromo.hitpromoworkstation.domain.model.StreamQuality.Default,
+                    startTime = System.currentTimeMillis() - 300000, // 5 minutes ago
+                    bytesTransferred = 157_286_400L
+                ),
+                streamQuality = net.hitpromo.hitpromoworkstation.domain.model.StreamQuality.Default,
+                cameraSettings = CameraSettings.Default,
+                systemHealth = SystemHealth.Default,
+                analyticsSummary = AnalyticsSummary.Sample,
+                deviceInfo = DeviceInfo.getCurrentDevice()
+            )
+
             DashboardContent(
                 uiState = previewState,
                 onIntent = {}
