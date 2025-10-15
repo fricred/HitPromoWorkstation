@@ -1,6 +1,7 @@
 package net.hitpromo.hitpromoworkstation.presentation.login
 
 import net.hitpromo.hitpromoworkstation.domain.model.User
+import net.hitpromo.hitpromoworkstation.domain.scanner.LogLevel
 
 /**
  * UI State for the login screen using MVI pattern.
@@ -14,7 +15,17 @@ data class LoginUiState(
     val isSessionValidated: Boolean = false,
     val requirePasswordChange: Boolean = false,
     val passwordChangeUsername: String? = null,
-    val passwordChangeSessionId: String? = null
+    val passwordChangeSessionId: String? = null,
+    val isReadyToScan: Boolean = false,
+    val scannedBadgeId: String? = null,
+
+    // Scanner state
+    val scannerStatus: ScannerStatus = ScannerStatus.Initializing,
+    val scannerName: String? = null,
+    val scannerId: Int? = null,
+    val debugLogs: List<DebugLog> = emptyList(),
+    val showDebugModal: Boolean = false,
+    val maxDebugLogs: Int = 100
 ) {
     /**
      * Check if there's an active error.
@@ -82,3 +93,27 @@ data class LoginUiState(
         )
     }
 }
+
+/**
+ * Scanner status states for UI display.
+ */
+enum class ScannerStatus {
+    Initializing,       // SDK is initializing
+    ScannerNotFound,    // No scanner detected after timeout
+    ScannerFound,       // Scanner detected but not connected
+    Connecting,         // Attempting to connect
+    Connected,          // Connected but not actively scanning
+    ReadyToScan,        // Ready to scan barcodes
+    Scanning,           // Actively scanning
+    Disconnected,       // Scanner disconnected
+    Error               // Error state
+}
+
+/**
+ * Debug log entry for scanner events.
+ */
+data class DebugLog(
+    val timestamp: Long = System.currentTimeMillis(),
+    val level: LogLevel,
+    val message: String
+)

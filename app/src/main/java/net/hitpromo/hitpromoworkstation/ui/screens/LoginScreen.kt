@@ -1,7 +1,7 @@
 package net.hitpromo.hitpromoworkstation.ui.screens
 
 import android.content.res.Configuration
-import android.os.Build
+import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -15,403 +15,323 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import net.hitpromo.hitpromoworkstation.BuildConfig
+import androidx.compose.ui.unit.sp
+import net.hitpromo.hitpromoworkstation.R
 import net.hitpromo.hitpromoworkstation.presentation.components.IndustrialButton
-import net.hitpromo.hitpromoworkstation.presentation.components.IndustrialCard
-import net.hitpromo.hitpromoworkstation.presentation.components.IndustrialOutlinedButton
 import net.hitpromo.hitpromoworkstation.presentation.components.IndustrialStatusText
-import net.hitpromo.hitpromoworkstation.presentation.components.IndustrialTextField
+import net.hitpromo.hitpromoworkstation.presentation.login.DebugLog
+import net.hitpromo.hitpromoworkstation.presentation.login.ScannerStatus
+import net.hitpromo.hitpromoworkstation.ui.components.DebugLogsModal
+import net.hitpromo.hitpromoworkstation.ui.theme.AlertRed
 import net.hitpromo.hitpromoworkstation.ui.theme.HitPromoWorkstationTheme
-import net.hitpromo.hitpromoworkstation.ui.theme.IndustrialTextStyles
+import net.hitpromo.hitpromoworkstation.ui.theme.InfoBlue
+import net.hitpromo.hitpromoworkstation.ui.theme.SafetyGreen
+import net.hitpromo.hitpromoworkstation.ui.theme.WarningAmber
 
 /**
- * Industrial Login Screen for Hit Promotional Products Workstation
+ * Badge Scanning Login Screen for Hit Promotional Products Workstation
  *
- * Optimized for Samsung Galaxy Tab A9+ (11" landscape):
+ * Optimized for Samsung Galaxy Tab A9+ (11" landscape) with Zebra LS2208 barcode scanner:
+ * - Zebra LS2208 acts as keyboard wedge (types badge ID + Enter)
  * - Large touch targets for gloved operation
  * - High contrast colors for production floor lighting
- * - Clear typography for maximum readability
- * - Professional branding and layout
+ * - Clean, centered design with prominent logo
+ * - Simple one-button interface
+ * - Scanner status display and debug logs for troubleshooting
  */
 @Composable
 fun LoginScreen(
-    onLoginClick: (username: String, password: String) -> Unit,
-    onForgotPasswordClick: () -> Unit,
+    onBadgeScan: (badgeId: String) -> Unit,
+    onReadyToScan: () -> Unit,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
-    errorMessage: String? = null
+    isReadyToScan: Boolean = false,
+    errorMessage: String? = null,
+    scannerStatus: ScannerStatus = ScannerStatus.Initializing,
+    scannerName: String? = null,
+    debugLogs: List<DebugLog> = emptyList(),
+    showDebugModal: Boolean = false,
+    onToggleDebugLogs: () -> Unit = {},
+    onCopyLogs: () -> Unit = {},
+    onClearLogs: () -> Unit = {}
 ) {
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var rememberMe by remember { mutableStateOf(false) }
+    var scannedInput by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+
+    // Focus the invisible text field when ready to scan
+    LaunchedEffect(isReadyToScan) {
+        if (isReadyToScan) {
+            focusRequester.requestFocus()
+        }
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Left side - Branding and Information
-            BrandingSection(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
-            )
+        // Logo in top-left corner
+        Image(
+            painter = painterResource(id = R.drawable.hit_promo_logo),
+            contentDescription = "Hit Promotional Products Logo",
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(48.dp)
+                .size(180.dp)
+        )
 
-            // Right side - Login Form
-            LoginFormSection(
-                username = username,
-                password = password,
-                rememberMe = rememberMe,
-                isLoading = isLoading,
-                errorMessage = errorMessage,
-                onUsernameChange = { username = it },
-                onPasswordChange = { password = it },
-                onRememberMeChange = { rememberMe = it },
-                onLoginClick = { onLoginClick(username, password) },
-                onForgotPasswordClick = onForgotPasswordClick,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
+        // Debug logs button in top-right corner
+        IconButton(
+            onClick = onToggleDebugLogs,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(48.dp)
+                .size(64.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = "Debug Logs",
+                tint = if (debugLogs.isNotEmpty()) InfoBlue else Color.Gray,
+                modifier = Modifier.size(48.dp)
             )
         }
-    }
-}
 
-/**
- * Left section with company branding and system information.
- */
-@Composable
-private fun BrandingSection(
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val configuration = LocalConfiguration.current
-
-    // Get actual system information
-    val appVersion = BuildConfig.VERSION_NAME
-    val buildType = if (BuildConfig.DEBUG) "Development" else "Production"
-    val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
-    val orientation = when (configuration.orientation) {
-        Configuration.ORIENTATION_LANDSCAPE -> "Landscape"
-        Configuration.ORIENTATION_PORTRAIT -> "Portrait"
-        else -> "Unknown"
-    }
-
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.primaryContainer
-    ) {
+        // Centered content area
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(48.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .align(Alignment.Center)
+                .width(600.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            // Company Logo Placeholder
-            // TODO: Replace with actual company logo
-            Box(
-                modifier = Modifier
-                    .size(120.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = androidx.compose.foundation.shape.CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
+            // Status message or error
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(48.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 4.dp
+                )
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "HP",
-                    style = MaterialTheme.typography.displayMedium,
-                    color = MaterialTheme.colorScheme.onPrimary
+                    text = "Authenticating...",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            } else if (isReadyToScan) {
+                Text(
+                    text = "Ready to scan...",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center
+                )
+            } else if (errorMessage != null) {
+                IndustrialStatusText(
+                    text = errorMessage,
+                    isError = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Text(
-                text = "Hit Promotional Products",
-                style = MaterialTheme.typography.displayMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Industrial Workstation",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            IndustrialCard(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp)
-                ) {
-                    Text(
-                        text = "System Information",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    SystemInfoRow("Version", appVersion)
-                    SystemInfoRow("Environment", buildType)
-                    SystemInfoRow("Device", deviceModel)
-                    SystemInfoRow("Orientation", orientation)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "For technical support, contact your system administrator",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                textAlign = TextAlign.Center
+            // Main action button - "Scan ID to Login"
+            IndustrialButton(
+                text = "Scan ID to Login",
+                onClick = {
+                    scannedInput = ""
+                    onReadyToScan()
+                },
+                isLoading = isLoading,
+                enabled = !isLoading && !isReadyToScan,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
             )
         }
-    }
-}
 
-/**
- * Right section with the login form.
- */
-@Composable
-private fun LoginFormSection(
-    username: String,
-    password: String,
-    rememberMe: Boolean,
-    isLoading: Boolean,
-    errorMessage: String?,
-    onUsernameChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
-    onRememberMeChange: (Boolean) -> Unit,
-    onLoginClick: () -> Unit,
-    onForgotPasswordClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
+        // Invisible text field to capture scanner input
+        // The Zebra LS2208 scanner acts as a keyboard wedge
+        TextField(
+            value = scannedInput,
+            onValueChange = { scannedInput = it },
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(48.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            IndustrialCard(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Workstation Login",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Enter your credentials to access the system",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Error message display
-                    if (errorMessage != null) {
-                        IndustrialStatusText(
-                            text = errorMessage,
-                            isError = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
+                .size(1.dp)
+                .focusRequester(focusRequester)
+                .onKeyEvent { keyEvent ->
+                    // Detect Enter key press (scanner sends Enter after badge ID)
+                    if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER) {
+                        if (scannedInput.isNotBlank()) {
+                            onBadgeScan(scannedInput.trim())
+                            scannedInput = ""
+                        }
+                        true
+                    } else {
+                        false
                     }
-
-                    // Username field
-                    IndustrialTextField(
-                        value = username,
-                        onValueChange = onUsernameChange,
-                        label = "Username",
-                        enabled = !isLoading,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Password field
-                    IndustrialTextField(
-                        value = password,
-                        onValueChange = onPasswordChange,
-                        label = "Password",
-                        isPassword = true,
-                        enabled = !isLoading,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Remember me checkbox
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = rememberMe,
-                            onCheckedChange = onRememberMeChange,
-                            enabled = !isLoading
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Remember me on this device",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                },
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent
+            ),
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    if (scannedInput.isNotBlank()) {
+                        onBadgeScan(scannedInput.trim())
+                        scannedInput = ""
                     }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Login button
-                    IndustrialButton(
-                        text = "Sign In",
-                        onClick = onLoginClick,
-                        isLoading = isLoading,
-                        enabled = username.isNotBlank() && password.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Forgot password button
-                    IndustrialOutlinedButton(
-                        text = "Forgot Password?",
-                        onClick = onForgotPasswordClick,
-                        enabled = !isLoading,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
+            )
+        )
+
+        // Scanner status display at bottom
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val (statusText, statusColor) = when (scannerStatus) {
+                ScannerStatus.Initializing -> "Initializing scanner..." to Color.Gray
+                ScannerStatus.ScannerNotFound -> "Scanner not detected" to WarningAmber
+                ScannerStatus.ScannerFound -> "Scanner detected: ${scannerName ?: "Unknown"}" to InfoBlue
+                ScannerStatus.Connecting -> "Connecting to scanner..." to InfoBlue
+                ScannerStatus.Connected -> "Scanner connected: ${scannerName ?: "Unknown"}" to SafetyGreen
+                ScannerStatus.ReadyToScan -> "Ready to scan" to SafetyGreen
+                ScannerStatus.Scanning -> "Scanning..." to SafetyGreen
+                ScannerStatus.Disconnected -> "Scanner disconnected" to AlertRed
+                ScannerStatus.Error -> "Scanner error" to AlertRed
             }
+
+            Text(
+                text = statusText,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = statusColor
+            )
+        }
+
+        // Debug logs modal
+        if (showDebugModal) {
+            DebugLogsModal(
+                logs = debugLogs,
+                onDismiss = onToggleDebugLogs,
+                onCopyLogs = onCopyLogs,
+                onClearLogs = onClearLogs
+            )
         }
     }
 }
 
-/**
- * Helper composable for system information rows.
- */
-@Composable
-private fun SystemInfoRow(
-    label: String,
-    value: String
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
 @Preview(
-    name = "Login Screen - Landscape",
+    name = "Badge Scan Login - Landscape",
     widthDp = 1280,
     heightDp = 800,
     showBackground = true
 )
 @Composable
-fun LoginScreenPreview() {
+fun BadgeScanLoginScreenPreview() {
     HitPromoWorkstationTheme {
         LoginScreen(
-            onLoginClick = { _, _ -> },
-            onForgotPasswordClick = { },
+            onBadgeScan = { },
+            onReadyToScan = { },
             isLoading = false,
+            isReadyToScan = false,
             errorMessage = null
         )
     }
 }
 
 @Preview(
-    name = "Login Screen - With Error",
+    name = "Badge Scan Login - Ready to Scan",
     widthDp = 1280,
     heightDp = 800,
     showBackground = true
 )
 @Composable
-fun LoginScreenErrorPreview() {
+fun BadgeScanLoginReadyPreview() {
     HitPromoWorkstationTheme {
         LoginScreen(
-            onLoginClick = { _, _ -> },
-            onForgotPasswordClick = { },
+            onBadgeScan = { },
+            onReadyToScan = { },
             isLoading = false,
-            errorMessage = "Invalid username or password"
+            isReadyToScan = true,
+            errorMessage = null
         )
     }
 }
 
 @Preview(
-    name = "Login Screen - Loading",
+    name = "Badge Scan Login - Loading",
     widthDp = 1280,
     heightDp = 800,
     showBackground = true
 )
 @Composable
-fun LoginScreenLoadingPreview() {
+fun BadgeScanLoginLoadingPreview() {
     HitPromoWorkstationTheme {
         LoginScreen(
-            onLoginClick = { _, _ -> },
-            onForgotPasswordClick = { },
+            onBadgeScan = { },
+            onReadyToScan = { },
             isLoading = true,
+            isReadyToScan = false,
             errorMessage = null
+        )
+    }
+}
+
+@Preview(
+    name = "Badge Scan Login - Error",
+    widthDp = 1280,
+    heightDp = 800,
+    showBackground = true
+)
+@Composable
+fun BadgeScanLoginErrorPreview() {
+    HitPromoWorkstationTheme {
+        LoginScreen(
+            onBadgeScan = { },
+            onReadyToScan = { },
+            isLoading = false,
+            isReadyToScan = false,
+            errorMessage = "Invalid badge ID. Please try again."
         )
     }
 }

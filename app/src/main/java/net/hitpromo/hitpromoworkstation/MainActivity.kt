@@ -117,16 +117,31 @@ fun IndustrialWorkstationApp(
         // Show login screen if not authenticated
         !uiState.isAuthenticated -> {
             LoginScreen(
-                onLoginClick = { username, password ->
-                    // Trigger sign-in through ViewModel
-                    viewModel.handleIntent(LoginIntent.SignIn(username, password))
+                onBadgeScan = { badgeId ->
+                    // Trigger badge-based sign-in through ViewModel
+                    viewModel.handleIntent(LoginIntent.ScanBadge(badgeId))
                 },
-                onForgotPasswordClick = {
-                    // Navigate to forgot password screen
-                    showForgotPassword = true
+                onReadyToScan = {
+                    // Set ready to scan state
+                    viewModel.handleIntent(LoginIntent.ReadyToScan)
                 },
                 isLoading = uiState.isLoading,
+                isReadyToScan = uiState.isReadyToScan,
                 errorMessage = uiState.errorMessage,
+                // Scanner integration parameters
+                scannerStatus = uiState.scannerStatus,
+                scannerName = uiState.scannerName,
+                debugLogs = uiState.debugLogs,
+                showDebugModal = uiState.showDebugModal,
+                onToggleDebugLogs = {
+                    viewModel.handleIntent(LoginIntent.ToggleDebugLogs)
+                },
+                onCopyLogs = {
+                    viewModel.handleIntent(LoginIntent.CopyLogs)
+                },
+                onClearLogs = {
+                    viewModel.handleIntent(LoginIntent.ClearLogs)
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }

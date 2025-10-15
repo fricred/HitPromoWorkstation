@@ -1,9 +1,13 @@
 package net.hitpromo.hitpromoworkstation.presentation.login
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,21 +17,31 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import net.hitpromo.hitpromoworkstation.data.local.UserPreferences
 import net.hitpromo.hitpromoworkstation.domain.model.AuthResult
+import net.hitpromo.hitpromoworkstation.domain.repository.BadgeAuthRepository
+import net.hitpromo.hitpromoworkstation.domain.scanner.LogLevel
+import net.hitpromo.hitpromoworkstation.domain.scanner.ScannerEventDelegate
+import net.hitpromo.hitpromoworkstation.domain.scanner.ScannerSDKManager
 import net.hitpromo.hitpromoworkstation.domain.usecase.SignInUseCase
 import net.hitpromo.hitpromoworkstation.domain.usecase.SignOutUseCase
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 /**
  * ViewModel for the login screen implementing MVVM + MVI architecture.
  *
- * Handles authentication state management and user interactions using
- * reactive streams and use cases.
+ * Handles authentication state management, user interactions, and scanner integration
+ * using reactive streams and use cases.
  */
 @HiltViewModel
 class LoginViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val signInUseCase: SignInUseCase,
     private val signOutUseCase: SignOutUseCase,
-    private val userPreferences: UserPreferences
+    private val userPreferences: UserPreferences,
+    private val scannerSDKManager: ScannerSDKManager,
+    private val badgeAuthRepository: BadgeAuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState.Initial)
@@ -39,9 +53,68 @@ class LoginViewModel @Inject constructor(
      */
     private var initializationJob: Job? = null
 
+    /**
+     * Scanner event delegate - receives callbacks from ScannerSDKManager.
+     * Posts intents to ViewModel for processing.
+     */
+    private val scannerEventDelegate = object : ScannerEventDelegate {
+        override fun onScannerAppeared(scannerId: Int, name: String) {
+            viewModelScope.launch {
+                handleIntent(LoginIntent.OnScannerAppeared(scannerId, name))
+            }
+        }
+
+        override fun onScannerConnected(scannerId: Int, name: String) {
+            viewModelScope.launch {
+                handleIntent(LoginIntent.OnScannerConnected(scannerId, name))
+            }
+        }
+
+        override fun onScannerDisconnected(scannerId: Int) {
+            viewModelScope.launch {
+                handleIntent(LoginIntent.OnScannerDisconnected(scannerId))
+            }
+        }
+
+        override fun onScannerDisappeared(scannerId: Int) {
+            viewModelScope.launch {
+                handleIntent(LoginIntent.OnScannerDisconnected(scannerId))
+            }
+        }
+
+        override fun onBarcodeScanned(barcode: String, type: Int, scannerId: Int) {
+            viewModelScope.launch {
+                handleIntent(LoginIntent.ScanBadge(barcode))
+            }
+        }
+
+        override fun onError(message: String) {
+            viewModelScope.launch {
+                handleIntent(LoginIntent.OnScannerError(message))
+            }
+        }
+
+        override fun onLog(level: LogLevel, message: String) {
+            viewModelScope.launch {
+                handleIntent(LoginIntent.OnLog(level, message))
+            }
+        }
+    }
+
     init {
         // Initialize UI state based on stored preferences
         initializationJob = initializeState()
+
+        // Register scanner delegate
+        scannerSDKManager.setDelegate(scannerEventDelegate)
+        addLog(LogLevel.INFO, "Scanner SDK delegate registered")
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Remove scanner delegate to prevent memory leaks
+        scannerSDKManager.setDelegate(null)
+        Log.d(TAG, "Scanner delegate removed")
     }
 
     /**
@@ -51,6 +124,12 @@ class LoginViewModel @Inject constructor(
         when (intent) {
             is LoginIntent.SignIn -> {
                 signIn(intent.username, intent.password)
+            }
+            is LoginIntent.ScanBadge -> {
+                signInWithBadge(intent.badgeId)
+            }
+            is LoginIntent.ReadyToScan -> {
+                setReadyToScan()
             }
             is LoginIntent.SignOut -> {
                 signOut()
@@ -69,6 +148,38 @@ class LoginViewModel @Inject constructor(
             }
             is LoginIntent.ClearPasswordChangeState -> {
                 clearPasswordChangeState()
+            }
+            // Scanner intents
+            is LoginIntent.StartScanning -> {
+                startScanning()
+            }
+            is LoginIntent.StopScanning -> {
+                stopScanning()
+            }
+            is LoginIntent.ToggleDebugLogs -> {
+                toggleDebugLogs()
+            }
+            is LoginIntent.CopyLogs -> {
+                copyLogsToClipboard()
+            }
+            is LoginIntent.ClearLogs -> {
+                clearDebugLogs()
+            }
+            // Internal scanner events
+            is LoginIntent.OnScannerAppeared -> {
+                handleScannerAppeared(intent.scannerId, intent.name)
+            }
+            is LoginIntent.OnScannerConnected -> {
+                handleScannerConnected(intent.scannerId, intent.name)
+            }
+            is LoginIntent.OnScannerDisconnected -> {
+                handleScannerDisconnected(intent.scannerId)
+            }
+            is LoginIntent.OnScannerError -> {
+                handleScannerError(intent.message)
+            }
+            is LoginIntent.OnLog -> {
+                addLog(intent.level, intent.message)
             }
         }
     }
@@ -128,6 +239,79 @@ class LoginViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    /**
+     * Sign in with scanned badge ID.
+     *
+     * Calls badge lookup API and authenticates user if successful.
+     */
+    private fun signInWithBadge(badgeId: String) {
+        viewModelScope.launch {
+            try {
+                // Wait for initialization to complete before proceeding
+                initializationJob?.join()
+
+                Log.d(TAG, "Badge scanned: $badgeId")
+                addLog(LogLevel.INFO, "Processing badge scan: $badgeId")
+
+                // Set loading state
+                _uiState.value = _uiState.value.copy(
+                    isLoading = true,
+                    scannerStatus = ScannerStatus.Scanning,
+                    isReadyToScan = false
+                )
+
+                // Call badge authentication API
+                val result = badgeAuthRepository.authenticateWithBadge(badgeId)
+
+                if (result.isSuccess) {
+                    val response = result.getOrThrow()
+                    Log.d(TAG, "Badge authentication successful: ${response.name}")
+                    addLog(LogLevel.SUCCESS, "Badge authenticated: ${response.name}")
+
+                    // For now, just set authenticated state
+                    // TODO: Integrate with Cognito or create user session
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isAuthenticated = true,
+                        scannerStatus = ScannerStatus.ReadyToScan,
+                        errorMessage = null
+                    )
+                } else {
+                    val error = result.exceptionOrNull()
+                    val errorMessage = error?.message ?: "Badge authentication failed"
+                    Log.e(TAG, errorMessage, error)
+                    addLog(LogLevel.ERROR, errorMessage)
+
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        scannerStatus = ScannerStatus.ReadyToScan,
+                        errorMessage = errorMessage
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Badge authentication error", e)
+                addLog(LogLevel.ERROR, "Badge auth error: ${e.message}")
+
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    scannerStatus = ScannerStatus.ReadyToScan,
+                    errorMessage = "Badge authentication failed: ${e.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * Set the state to ready to scan.
+     */
+    private fun setReadyToScan() {
+        _uiState.value = _uiState.value.copy(
+            isReadyToScan = true,
+            errorMessage = null
+        )
     }
 
     /**
@@ -316,6 +500,141 @@ class LoginViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    // ========================================
+    // Scanner-specific methods
+    // ========================================
+
+    /**
+     * Start scanning mode.
+     */
+    private fun startScanning() {
+        _uiState.value = _uiState.value.copy(
+            scannerStatus = if (_uiState.value.scannerId != null) {
+                ScannerStatus.ReadyToScan
+            } else {
+                ScannerStatus.ScannerNotFound
+            },
+            isReadyToScan = true,
+            errorMessage = null
+        )
+        addLog(LogLevel.INFO, "Scanning mode activated")
+    }
+
+    /**
+     * Stop scanning mode.
+     */
+    private fun stopScanning() {
+        _uiState.value = _uiState.value.copy(
+            scannerStatus = if (_uiState.value.scannerId != null) {
+                ScannerStatus.Connected
+            } else {
+                ScannerStatus.Disconnected
+            },
+            isReadyToScan = false
+        )
+        addLog(LogLevel.INFO, "Scanning mode deactivated")
+    }
+
+    /**
+     * Toggle debug logs modal visibility.
+     */
+    private fun toggleDebugLogs() {
+        _uiState.value = _uiState.value.copy(
+            showDebugModal = !_uiState.value.showDebugModal
+        )
+    }
+
+    /**
+     * Copy debug logs to clipboard.
+     */
+    private fun copyLogsToClipboard() {
+        val logs = _uiState.value.debugLogs.joinToString("\n") { log ->
+            val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date(log.timestamp))
+            "[$timestamp] [${log.level.name}] ${log.message}"
+        }
+
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("Scanner Debug Logs", logs)
+        clipboard.setPrimaryClip(clip)
+
+        addLog(LogLevel.INFO, "Logs copied to clipboard (${_uiState.value.debugLogs.size} entries)")
+    }
+
+    /**
+     * Clear debug logs.
+     */
+    private fun clearDebugLogs() {
+        _uiState.value = _uiState.value.copy(debugLogs = emptyList())
+        addLog(LogLevel.INFO, "Debug logs cleared")
+    }
+
+    /**
+     * Handle scanner appeared event.
+     */
+    private fun handleScannerAppeared(scannerId: Int, name: String) {
+        _uiState.value = _uiState.value.copy(
+            scannerStatus = ScannerStatus.ScannerFound,
+            scannerName = name,
+            scannerId = scannerId
+        )
+    }
+
+    /**
+     * Handle scanner connected event.
+     */
+    private fun handleScannerConnected(scannerId: Int, name: String) {
+        _uiState.value = _uiState.value.copy(
+            scannerStatus = ScannerStatus.Connected,
+            scannerName = name,
+            scannerId = scannerId
+        )
+    }
+
+    /**
+     * Handle scanner disconnected event.
+     * If scannerId is 0, it means no scanner was ever detected (initial state).
+     */
+    private fun handleScannerDisconnected(scannerId: Int) {
+        _uiState.value = _uiState.value.copy(
+            scannerStatus = if (scannerId == 0) {
+                // scannerId 0 means no scanner was found during initialization
+                ScannerStatus.ScannerNotFound
+            } else {
+                // A real scanner was disconnected
+                ScannerStatus.Disconnected
+            },
+            scannerId = null,
+            scannerName = null,
+            isReadyToScan = false
+        )
+    }
+
+    /**
+     * Handle scanner error.
+     */
+    private fun handleScannerError(message: String) {
+        _uiState.value = _uiState.value.copy(
+            scannerStatus = ScannerStatus.Error,
+            errorMessage = message
+        )
+    }
+
+    /**
+     * Add a log entry to debug logs.
+     * Limits log size to maxDebugLogs to prevent memory issues.
+     */
+    private fun addLog(level: LogLevel, message: String) {
+        val newLog = DebugLog(
+            timestamp = System.currentTimeMillis(),
+            level = level,
+            message = message
+        )
+
+        val updatedLogs = (_uiState.value.debugLogs + newLog).takeLast(_uiState.value.maxDebugLogs)
+
+        _uiState.value = _uiState.value.copy(debugLogs = updatedLogs)
     }
 
     companion object {

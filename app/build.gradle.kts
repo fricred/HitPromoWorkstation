@@ -79,6 +79,7 @@ dependencies {
     // Architecture Components
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.navigation.compose)
 
     // Hilt Dependency Injection
@@ -142,4 +143,7 @@ dependencies {
 
     // Core library desugaring
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+
+    // Zebra Scanner SDK
+    implementation(files("libs/barcode_scanner_library_v2.6.29.0-release.aar"))
 }

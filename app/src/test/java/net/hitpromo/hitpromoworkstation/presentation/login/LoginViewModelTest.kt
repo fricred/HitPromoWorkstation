@@ -1,5 +1,6 @@
 package net.hitpromo.hitpromoworkstation.presentation.login
 
+import android.content.Context
 import app.cash.turbine.test
 import io.mockk.coEvery
 import io.mockk.every
@@ -10,6 +11,8 @@ import net.hitpromo.hitpromoworkstation.data.local.UserPreferences
 import net.hitpromo.hitpromoworkstation.domain.model.AuthResult
 import net.hitpromo.hitpromoworkstation.domain.model.User
 import net.hitpromo.hitpromoworkstation.domain.model.UserRole
+import net.hitpromo.hitpromoworkstation.domain.repository.BadgeAuthRepository
+import net.hitpromo.hitpromoworkstation.domain.scanner.ScannerSDKManager
 import net.hitpromo.hitpromoworkstation.domain.usecase.SignInUseCase
 import net.hitpromo.hitpromoworkstation.domain.usecase.SignOutUseCase
 import org.junit.Assert.assertEquals
@@ -26,9 +29,12 @@ import org.junit.Test
  */
 class LoginViewModelTest {
 
+    private lateinit var context: Context
     private lateinit var signInUseCase: SignInUseCase
     private lateinit var signOutUseCase: SignOutUseCase
     private lateinit var userPreferences: UserPreferences
+    private lateinit var scannerSDKManager: ScannerSDKManager
+    private lateinit var badgeAuthRepository: BadgeAuthRepository
     private lateinit var loginViewModel: LoginViewModel
 
     private val mockUser = User(
@@ -41,9 +47,12 @@ class LoginViewModelTest {
 
     @Before
     fun setup() {
+        context = mockk(relaxed = true)
         signInUseCase = mockk()
         signOutUseCase = mockk()
         userPreferences = mockk()
+        scannerSDKManager = mockk(relaxed = true)
+        badgeAuthRepository = mockk(relaxed = true)
 
         // Default mock behaviors
         every { userPreferences.isLoggedIn } returns flowOf(false)
@@ -53,7 +62,14 @@ class LoginViewModelTest {
         every { userPreferences.userEmail } returns flowOf(null)
         coEvery { userPreferences.setRememberMe(any()) } returns Unit
 
-        loginViewModel = LoginViewModel(signInUseCase, signOutUseCase, userPreferences)
+        loginViewModel = LoginViewModel(
+            context,
+            signInUseCase,
+            signOutUseCase,
+            userPreferences,
+            scannerSDKManager,
+            badgeAuthRepository
+        )
     }
 
     @Test
@@ -230,7 +246,18 @@ class LoginViewModelTest {
         every { userPreferences.userId } returns flowOf(null)
 
         // When
-        val viewModel = LoginViewModel(signInUseCase, signOutUseCase, userPreferences)
+        val testContext = mockk<Context>(relaxed = true)
+        val testScannerManager = mockk<ScannerSDKManager>(relaxed = true)
+        val testBadgeAuthRepo = mockk<BadgeAuthRepository>(relaxed = true)
+
+        val viewModel = LoginViewModel(
+            testContext,
+            signInUseCase,
+            signOutUseCase,
+            userPreferences,
+            testScannerManager,
+            testBadgeAuthRepo
+        )
 
         // Then
         viewModel.uiState.test {

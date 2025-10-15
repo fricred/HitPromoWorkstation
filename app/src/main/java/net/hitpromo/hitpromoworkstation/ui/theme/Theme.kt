@@ -17,12 +17,12 @@ import androidx.core.view.WindowCompat
 
 // Industrial Dark Color Scheme - For night shifts and low-light environments
 private val IndustrialDarkColorScheme = darkColorScheme(
-    primary = HitPromoOrange,
+    primary = HitPromoBlue,
     onPrimary = TextOnColor,
-    primaryContainer = HitPromoOrangeDark,
+    primaryContainer = HitPromoBlueDark,
     onPrimaryContainer = TextOnColor,
 
-    secondary = HitPromoBlue,
+    secondary = HitPromoSecondary,
     onSecondary = TextOnColor,
     secondaryContainer = IndustrialGray,
     onSecondaryContainer = TextOnDark,
@@ -51,12 +51,12 @@ private val IndustrialDarkColorScheme = darkColorScheme(
 
 // Industrial Light Color Scheme - Primary scheme for production floor
 private val IndustrialLightColorScheme = lightColorScheme(
-    primary = HitPromoOrange,
+    primary = HitPromoBlue,
     onPrimary = TextOnColor,
     primaryContainer = IndustrialWhite,
     onPrimaryContainer = TextPrimary,
 
-    secondary = HitPromoBlue,
+    secondary = HitPromoSecondary,
     onSecondary = TextOnColor,
     secondaryContainer = SurfaceSecondary,
     onSecondaryContainer = TextPrimary,

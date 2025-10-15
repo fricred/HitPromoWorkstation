@@ -4,9 +4,9 @@ import androidx.compose.ui.graphics.Color
 
 // Industrial Color Palette - High Contrast for Production Floor
 // Primary Colors - Hit Promo Brand with Industrial Enhancement
-val HitPromoOrange = Color(0xFFFF6600)      // Brand orange - high visibility
-val HitPromoOrangeDark = Color(0xFFE55A00)  // Darker variant for dark mode
-val HitPromoBlue = Color(0xFF003D7A)        // Professional blue - readable on screens
+val HitPromoBlue = Color(0xFF326FC7)        // Brand blue RGB(50, 111, 199) - primary brand color
+val HitPromoBlueDark = Color(0xFF2859A3)    // Darker variant for dark mode
+val HitPromoSecondary = Color(0xFF003D7A)   // Professional secondary blue
 
 // Industrial Background Colors - Optimized for bright production lighting
 val IndustrialWhite = Color(0xFFFAFAFA)     // Slightly off-white to reduce glare
@@ -34,13 +34,13 @@ val SurfaceElevated = Color(0xFFFFFFFF)    // Elevated surfaces (cards, dialogs)
 // Border and Divider Colors
 val BorderLight = Color(0xFFE0E0E0)        // Light borders and dividers
 val BorderDark = Color(0xFF424242)         // Dark borders for contrast
-val BorderAccent = Color(0xFFFF6600)       // Accent borders for emphasis
+val BorderAccent = Color(0xFF326FC7)       // Accent borders for emphasis
 
 // Legacy colors for compatibility (to be replaced)
-val Purple80 = HitPromoOrangeDark
+val Purple80 = HitPromoBlueDark
 val PurpleGrey80 = IndustrialGray
 val Pink80 = WarningAmber
 
-val Purple40 = HitPromoOrange
+val Purple40 = HitPromoBlue
 val PurpleGrey40 = IndustrialDark
 val Pink40 = AlertRed

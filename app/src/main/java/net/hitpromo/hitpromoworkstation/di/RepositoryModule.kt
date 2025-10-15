@@ -5,7 +5,9 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import net.hitpromo.hitpromoworkstation.data.repository.AuthRepositoryImpl
+import net.hitpromo.hitpromoworkstation.data.repository.BadgeAuthRepositoryImpl
 import net.hitpromo.hitpromoworkstation.domain.repository.AuthRepository
+import net.hitpromo.hitpromoworkstation.domain.repository.BadgeAuthRepository
 import javax.inject.Singleton
 
 /**
@@ -23,4 +25,13 @@ abstract class RepositoryModule {
     abstract fun bindAuthRepository(
         authRepositoryImpl: AuthRepositoryImpl
     ): AuthRepository
+
+    /**
+     * Binds BadgeAuthRepositoryImpl to BadgeAuthRepository interface.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindBadgeAuthRepository(
+        badgeAuthRepositoryImpl: BadgeAuthRepositoryImpl
+    ): BadgeAuthRepository
 }

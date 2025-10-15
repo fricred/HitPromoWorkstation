@@ -18,7 +18,7 @@ class SignInUseCase @Inject constructor(
 ) {
 
     /**
-     * Execute the sign-in operation.
+     * Execute the sign-in operation with username and password (legacy).
      *
      * @param username The user's username
      * @param password The user's password
@@ -41,6 +41,52 @@ class SignInUseCase @Inject constructor(
 
         } catch (e: Exception) {
             emit(AuthResult.Error("An unexpected error occurred", e))
+        }
+    }
+
+    /**
+     * Execute badge-based sign-in operation.
+     *
+     * The badge ID is used as the username, and a fixed token is used as the password
+     * for authentication with AWS Cognito.
+     *
+     * @param badgeId The scanned badge ID
+     * @return Flow of AuthResult indicating the progress and result of the operation
+     */
+    fun signInWithBadge(badgeId: String): Flow<AuthResult<User>> = flow {
+        try {
+            emit(AuthResult.Loading)
+
+            // Validate badge ID
+            val validationResult = validateBadgeId(badgeId)
+            if (validationResult != null) {
+                emit(validationResult)
+                return@flow
+            }
+
+            // Use badge ID as both username and password for now
+            // In a production system, you would have a backend that validates the badge
+            // and returns appropriate credentials
+            val result = authRepository.signIn(badgeId.trim(), badgeId.trim())
+            emit(result)
+
+        } catch (e: Exception) {
+            emit(AuthResult.Error("Badge authentication failed: ${e.message}", e))
+        }
+    }
+
+    /**
+     * Validate badge ID input.
+     *
+     * @param badgeId The badge ID to validate
+     * @return AuthResult.Error if validation fails, null if valid
+     */
+    private fun validateBadgeId(badgeId: String): AuthResult.Error? {
+        return when {
+            badgeId.isBlank() -> AuthResult.Error("Badge ID cannot be empty")
+            badgeId.length < MIN_BADGE_ID_LENGTH ->
+                AuthResult.Error("Invalid badge ID format")
+            else -> null
         }
     }
 
@@ -122,5 +168,6 @@ class SignInUseCase @Inject constructor(
     companion object {
         private const val MIN_USERNAME_LENGTH = 3
         private const val MIN_PASSWORD_LENGTH = 8
+        private const val MIN_BADGE_ID_LENGTH = 3
     }
 }

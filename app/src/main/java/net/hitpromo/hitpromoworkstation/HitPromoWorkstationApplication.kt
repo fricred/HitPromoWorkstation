@@ -3,9 +3,14 @@ package net.hitpromo.hitpromoworkstation
 import android.app.Application
 import android.content.res.Resources
 import android.util.Log
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.amplifyframework.AmplifyException
 import com.amplifyframework.auth.cognito.AWSCognitoAuthPlugin
 import com.amplifyframework.core.Amplify
+import com.zebra.scannercontrol.DCSSDKDefs
+import com.zebra.scannercontrol.SDKHandler
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
 
@@ -16,7 +21,7 @@ import java.io.File
  * and any application-level initialization for the industrial streaming workstation.
  */
 @HiltAndroidApp
-class HitPromoWorkstationApplication : Application() {
+class HitPromoWorkstationApplication : Application(), DefaultLifecycleObserver {
 
     companion object {
         private const val TAG = "HitPromoWorkstation"
@@ -43,11 +48,24 @@ class HitPromoWorkstationApplication : Application() {
         fun getAmplifyInitializationError(): Throwable? = amplifyInitializationError
     }
 
+    /**
+     * Zebra Scanner SDK handler - initialized once for app lifetime.
+     * CRITICAL: This must be accessible to ScannerSDKManagerImpl via lazy delegate.
+     */
+    lateinit var sdkHandler: SDKHandler
+        private set
+
     override fun onCreate() {
-        super.onCreate()
+        super<Application>.onCreate()
+
+        // Register lifecycle observer for SDK cleanup
+        ProcessLifecycleOwner.get().lifecycle.addObserver(this)
 
         // Initialize AWS Amplify
         initializeAmplify()
+
+        // Initialize Zebra Scanner SDK
+        initializeZebraScannerSDK()
 
         // Initialize any additional application-level components here
         // Such as crash reporting, analytics, etc.
@@ -144,5 +162,76 @@ class HitPromoWorkstationApplication : Application() {
             Log.e(TAG, "Error validating Amplify configuration", e)
             false
         }
+    }
+
+    /**
+     * Initialize Zebra Scanner SDK.
+     *
+     * Creates the SDK handler that will be used throughout the app lifetime
+     * for communicating with barcode scanners. The actual delegate and event
+     * subscription is handled by ScannerSDKManagerImpl.
+     */
+    private fun initializeZebraScannerSDK() {
+        try {
+            Log.d(TAG, "Initializing Zebra Scanner SDK...")
+
+            // Create SDK handler
+            // Parameters: context, enableUsbDiscovery, throwExceptions
+            sdkHandler = SDKHandler(this, true, false)
+
+            // Enable scanner detection
+            sdkHandler.dcssdkEnableAvailableScannersDetection(true)
+
+            // Set operational modes for USB scanner support
+            sdkHandler.dcssdkSetOperationalMode(DCSSDKDefs.DCSSDK_MODE.DCSSDK_OPMODE_USB_CDC)
+            sdkHandler.dcssdkSetOperationalMode(DCSSDKDefs.DCSSDK_MODE.DCSSDK_OPMODE_SNAPI)
+
+            Log.i(TAG, "Zebra Scanner SDK initialized successfully")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize Zebra Scanner SDK", e)
+            // SDK initialization failure is not fatal - app can still function
+            // without scanner, but badge scanning won't work
+        }
+    }
+
+    /**
+     * Called when app goes to background.
+     * Release scanner resources to prevent leaks.
+     */
+    override fun onStop(owner: LifecycleOwner) {
+        super.onStop(owner)
+        Log.d(TAG, "App backgrounded - releasing scanner SDK")
+        releaseZebraScannerSDK()
+    }
+
+    /**
+     * Called when app comes to foreground.
+     * Re-initialize scanner if needed.
+     */
+    override fun onStart(owner: LifecycleOwner) {
+        super.onStart(owner)
+        Log.d(TAG, "App foregrounded - checking scanner SDK")
+        // SDK is already initialized, just log
+    }
+
+    /**
+     * Release Zebra Scanner SDK resources.
+     * Called when app is backgrounded or terminated.
+     */
+    private fun releaseZebraScannerSDK() {
+        try {
+            if (::sdkHandler.isInitialized) {
+                sdkHandler.dcssdkClose()
+                Log.d(TAG, "Zebra Scanner SDK released successfully")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing Zebra Scanner SDK", e)
+        }
+    }
+
+    override fun onTerminate() {
+        super.onTerminate()
+        releaseZebraScannerSDK()
     }
 }
