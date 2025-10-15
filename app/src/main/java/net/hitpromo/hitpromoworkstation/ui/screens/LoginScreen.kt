@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -89,6 +90,24 @@ fun LoginScreen(
     var scannedInput by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
 
+    // Get screen dimensions for responsive layout
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+
+    // Responsive sizing based on screen width
+    // Small phones (< 600dp), tablets (>= 600dp)
+    val isTablet = screenWidth >= 600.dp
+
+    val logoPadding = if (isTablet) 48.dp else 16.dp
+    val logoSize = if (isTablet) 180.dp else 100.dp
+    val debugButtonPadding = if (isTablet) 48.dp else 16.dp
+    val debugButtonSize = if (isTablet) 64.dp else 48.dp
+    val debugIconSize = if (isTablet) 48.dp else 32.dp
+    val contentWidth = if (isTablet) 600.dp else screenWidth * 0.9f
+    val buttonHeight = if (isTablet) 64.dp else 56.dp
+    val statusBarPadding = if (isTablet) 32.dp else 16.dp
+    val statusTextSize = if (isTablet) 16.sp else 14.sp
+
     // Focus the invisible text field when ready to scan
     LaunchedEffect(isReadyToScan) {
         if (isReadyToScan) {
@@ -107,8 +126,8 @@ fun LoginScreen(
             contentDescription = "Hit Promotional Products Logo",
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(48.dp)
-                .size(180.dp)
+                .padding(logoPadding)
+                .size(logoSize)
         )
 
         // Debug logs button in top-right corner
@@ -116,14 +135,14 @@ fun LoginScreen(
             onClick = onToggleDebugLogs,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(48.dp)
-                .size(64.dp)
+                .padding(debugButtonPadding)
+                .size(debugButtonSize)
         ) {
             Icon(
                 imageVector = Icons.Default.Info,
                 contentDescription = "Debug Logs",
                 tint = if (debugLogs.isNotEmpty()) InfoBlue else Color.Gray,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(debugIconSize)
             )
         }
 
@@ -131,7 +150,8 @@ fun LoginScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
-                .width(600.dp),
+                .width(contentWidth)
+                .padding(horizontal = if (isTablet) 0.dp else 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -176,7 +196,7 @@ fun LoginScreen(
                 enabled = !isLoading && !isReadyToScan,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .height(buttonHeight)
             )
         }
 
@@ -224,7 +244,7 @@ fun LoginScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(32.dp),
+                .padding(statusBarPadding),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -242,9 +262,11 @@ fun LoginScreen(
 
             Text(
                 text = statusText,
-                fontSize = 16.sp,
+                fontSize = statusTextSize,
                 fontWeight = FontWeight.Medium,
-                color = statusColor
+                color = statusColor,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
         }
 
@@ -332,6 +354,47 @@ fun BadgeScanLoginErrorPreview() {
             isLoading = false,
             isReadyToScan = false,
             errorMessage = "Invalid badge ID. Please try again."
+        )
+    }
+}
+
+@Preview(
+    name = "Badge Scan Login - Phone Portrait",
+    widthDp = 360,
+    heightDp = 640,
+    showBackground = true
+)
+@Composable
+fun BadgeScanLoginPhonePreview() {
+    HitPromoWorkstationTheme {
+        LoginScreen(
+            onBadgeScan = { },
+            onReadyToScan = { },
+            isLoading = false,
+            isReadyToScan = false,
+            errorMessage = null,
+            scannerStatus = ScannerStatus.ScannerNotFound
+        )
+    }
+}
+
+@Preview(
+    name = "Badge Scan Login - Phone Landscape",
+    widthDp = 640,
+    heightDp = 360,
+    showBackground = true
+)
+@Composable
+fun BadgeScanLoginPhoneLandscapePreview() {
+    HitPromoWorkstationTheme {
+        LoginScreen(
+            onBadgeScan = { },
+            onReadyToScan = { },
+            isLoading = false,
+            isReadyToScan = false,
+            errorMessage = null,
+            scannerStatus = ScannerStatus.Connected,
+            scannerName = "LS2208"
         )
     }
 }
