@@ -20,10 +20,6 @@ class BadgeAuthRepositoryImpl @Inject constructor(
 
     companion object {
         private const val TAG = "BadgeAuthRepository"
-
-        // TEMPORARY: Fixed bearer token for initial testing
-        // TODO: User will provide real token tomorrow
-        private const val BEARER_TOKEN = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzY3NzMxODk1LCJpYXQiOjE3NTk5NTU4OTUsImp0aSI6IjBjNDQ4NjJmODI4NjRlZDZiNWRlMWQxNDQzNjdmMjJjIiwidXNlcl9pZCI6M30.ad-_VRs_C2nGKSUPMEW3RRQr-qLTe62ZRDqd4OGszv4"
     }
 
     override suspend fun authenticateWithBadge(badgeId: String): Result<BadgeLookupResponse> {
@@ -31,10 +27,11 @@ class BadgeAuthRepositoryImpl @Inject constructor(
             Log.d(TAG, "Attempting badge authentication for: $badgeId")
 
             val request = BadgeLookupRequest(operatorId = badgeId)
-            val response = badgeApiService.lookupBadge(BEARER_TOKEN, request)
+            val response = badgeApiService.lookupBadge(request)
 
             if (response.success) {
-                Log.d(TAG, "Badge authentication successful: ${response.name}")
+                val operatorName = response.data?.name ?: response.operatorId
+                Log.d(TAG, "Badge authentication successful: $operatorName")
                 Result.success(response)
             } else {
                 val errorMessage = response.message ?: "Badge authentication failed"

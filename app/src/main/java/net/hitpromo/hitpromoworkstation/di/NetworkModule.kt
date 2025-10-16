@@ -9,6 +9,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import net.hitpromo.hitpromoworkstation.BuildConfig
 import net.hitpromo.hitpromoworkstation.data.remote.BadgeApiService
 import net.hitpromo.hitpromoworkstation.data.remote.CognitoAuthDataSource
 import net.hitpromo.hitpromoworkstation.util.AndroidStringProvider
@@ -38,7 +39,9 @@ abstract class NetworkModule {
     ): StringProvider
 
     companion object {
-        private const val BASE_URL = "https://battleai.hit.local/"
+        // Base URL is configured in app/build.gradle.kts
+        // Change API_BASE_URL in build.gradle.kts when Fargate IP changes
+        private val BASE_URL = BuildConfig.API_BASE_URL
         private const val TIMEOUT_SECONDS = 30L
 
         /**

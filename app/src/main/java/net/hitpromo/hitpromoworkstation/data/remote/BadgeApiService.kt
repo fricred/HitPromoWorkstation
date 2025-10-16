@@ -16,13 +16,11 @@ interface BadgeApiService {
     /**
      * Look up operator information by badge ID.
      *
-     * @param bearerToken Bearer token for API authentication
      * @param request Badge lookup request containing operator_id
      * @return Badge lookup response with operator details
      */
-    @POST("api/hrdata/badgescan/lookup/")
+    @POST("api/badge-scan/")
     suspend fun lookupBadge(
-        @Header("Authorization") bearerToken: String,
         @Body request: BadgeLookupRequest
     ): BadgeLookupResponse
 }

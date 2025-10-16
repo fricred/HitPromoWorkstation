@@ -267,8 +267,12 @@ class LoginViewModel @Inject constructor(
 
                 if (result.isSuccess) {
                     val response = result.getOrThrow()
-                    Log.d(TAG, "Badge authentication successful: ${response.name}")
-                    addLog(LogLevel.SUCCESS, "Badge authenticated: ${response.name}")
+                    val operatorName = response.data?.name ?: "Unknown"
+                    val firstName = response.data?.firstName ?: ""
+                    val lastName = response.data?.lastName ?: ""
+
+                    Log.d(TAG, "Badge authentication successful: $operatorName ($firstName $lastName)")
+                    addLog(LogLevel.SUCCESS, "Badge authenticated: $operatorName")
 
                     // For now, just set authenticated state
                     // TODO: Integrate with Cognito or create user session
@@ -334,7 +338,21 @@ class LoginViewModel @Inject constructor(
                         }
                         is AuthResult.Success -> {
                             val rememberMe = userPreferences.rememberMe.first()
-                            _uiState.value = LoginUiState.Unauthenticated(rememberMe)
+                            // Preserve scanner state and debug logs on logout
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                isAuthenticated = false,
+                                user = null,
+                                errorMessage = null,
+                                rememberMe = rememberMe,
+                                isSessionValidated = false,
+                                requirePasswordChange = false,
+                                passwordChangeUsername = null,
+                                passwordChangeSessionId = null,
+                                isReadyToScan = false
+                                // Keep scannerStatus, scannerName, scannerId, and debugLogs from current state
+                            )
+                            addLog(LogLevel.INFO, "User logged out successfully")
                         }
                         is AuthResult.Error -> {
                             _uiState.value = LoginUiState.Error(

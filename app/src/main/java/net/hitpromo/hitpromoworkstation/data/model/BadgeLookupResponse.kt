@@ -16,11 +16,24 @@ data class BadgeLookupResponse(
     @Json(name = "operator_id")
     val operatorId: String,
 
-    val name: String? = null,
-
-    val department: String? = null,
-
-    val role: String? = null,
+    val data: OperatorData? = null,
 
     val message: String? = null
+)
+
+/**
+ * Operator data nested object from badge lookup response.
+ */
+@JsonClass(generateAdapter = true)
+data class OperatorData(
+    val name: String,
+
+    @Json(name = "first_name")
+    val firstName: String,
+
+    @Json(name = "last_name")
+    val lastName: String,
+
+    @Json(name = "is_supervisor")
+    val isSupervisor: Int
 )

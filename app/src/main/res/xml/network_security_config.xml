@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow cleartext traffic for POC/development purposes -->
+    <!-- TODO: Remove or restrict this in production -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Specific domain configuration for backend server -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">54.165.122.247</domain>
+    </domain-config>
+</network-security-config>

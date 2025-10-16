@@ -19,6 +19,10 @@ android {
 
         testInstrumentationRunner = "net.hitpromo.hitpromoworkstation.HiltTestRunner"
 
+        // API Base URL - Change this when Fargate IP changes
+        // Example: "http://54.165.122.247:8000/"
+        buildConfigField("String", "API_BASE_URL", "\"http://54.165.122.247:8000/\"")
+
         vectorDrawables {
             useSupportLibrary = true
         }

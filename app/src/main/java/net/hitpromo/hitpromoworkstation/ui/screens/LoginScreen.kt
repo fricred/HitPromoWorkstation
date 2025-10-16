@@ -185,19 +185,80 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Main action button - "Scan ID to Login"
-            IndustrialButton(
-                text = "Scan ID to Login",
-                onClick = {
-                    scannedInput = ""
-                    onReadyToScan()
-                },
-                isLoading = isLoading,
-                enabled = !isLoading && !isReadyToScan,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(buttonHeight)
-            )
+            // Show manual input when scanner is not detected
+            if (scannerStatus == ScannerStatus.ScannerNotFound || scannerStatus == ScannerStatus.Error) {
+                var manualInput by remember { mutableStateOf("") }
+
+                Text(
+                    text = "Scanner not available - Enter Operator ID manually",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = WarningAmber,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                TextField(
+                    value = manualInput,
+                    onValueChange = { manualInput = it },
+                    label = { Text("Operator ID") },
+                    placeholder = { Text("A000004892") },
+                    singleLine = true,
+                    enabled = !isLoading,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(buttonHeight),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                        unfocusedIndicatorColor = MaterialTheme.colorScheme.outline
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = if (isTablet) 18.sp else 16.sp),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (manualInput.isNotBlank()) {
+                                onBadgeScan(manualInput.trim())
+                                manualInput = ""
+                            }
+                        }
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                IndustrialButton(
+                    text = "Login",
+                    onClick = {
+                        if (manualInput.isNotBlank()) {
+                            onBadgeScan(manualInput.trim())
+                            manualInput = ""
+                        }
+                    },
+                    isLoading = isLoading,
+                    enabled = !isLoading && manualInput.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(buttonHeight)
+                )
+            } else {
+                // Main action button - "Scan ID to Login"
+                IndustrialButton(
+                    text = "Scan ID to Login",
+                    onClick = {
+                        scannedInput = ""
+                        onReadyToScan()
+                    },
+                    isLoading = isLoading,
+                    enabled = !isLoading && !isReadyToScan,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(buttonHeight)
+                )
+            }
         }
 
         // Invisible text field to capture scanner input
