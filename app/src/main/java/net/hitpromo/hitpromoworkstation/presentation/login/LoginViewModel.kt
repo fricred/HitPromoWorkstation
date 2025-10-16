@@ -245,6 +245,7 @@ class LoginViewModel @Inject constructor(
      * Sign in with scanned badge ID.
      *
      * Calls badge lookup API and authenticates user if successful.
+     * Automatically stores the JWT token for subsequent API requests.
      */
     private fun signInWithBadge(badgeId: String) {
         viewModelScope.launch {
@@ -252,8 +253,34 @@ class LoginViewModel @Inject constructor(
                 // Wait for initialization to complete before proceeding
                 initializationJob?.join()
 
-                Log.d(TAG, "Badge scanned: $badgeId")
-                addLog(LogLevel.INFO, "Processing badge scan: $badgeId")
+                // Validate badge ID format and length
+                val sanitizedBadgeId = badgeId.trim()
+
+                if (sanitizedBadgeId.isEmpty()) {
+                    Log.w(TAG, "Badge ID is empty")
+                    addLog(LogLevel.WARNING, "Invalid badge ID: Empty")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        scannerStatus = ScannerStatus.ReadyToScan,
+                        errorMessage = "Invalid badge ID"
+                    )
+                    return@launch
+                }
+
+                // Enforce maximum length (typical badge IDs are shorter)
+                if (sanitizedBadgeId.length > 50) {
+                    Log.w(TAG, "Badge ID exceeds maximum length: ${sanitizedBadgeId.length}")
+                    addLog(LogLevel.WARNING, "Invalid badge ID: Too long")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        scannerStatus = ScannerStatus.ReadyToScan,
+                        errorMessage = "Invalid badge ID format"
+                    )
+                    return@launch
+                }
+
+                Log.d(TAG, "Badge scan validation passed")
+                addLog(LogLevel.INFO, "Processing badge scan")
 
                 // Set loading state
                 _uiState.value = _uiState.value.copy(
@@ -263,7 +290,7 @@ class LoginViewModel @Inject constructor(
                 )
 
                 // Call badge authentication API
-                val result = badgeAuthRepository.authenticateWithBadge(badgeId)
+                val result = badgeAuthRepository.authenticateWithBadge(sanitizedBadgeId)
 
                 if (result.isSuccess) {
                     val response = result.getOrThrow()
@@ -273,6 +300,13 @@ class LoginViewModel @Inject constructor(
 
                     Log.d(TAG, "Badge authentication successful: $operatorName ($firstName $lastName)")
                     addLog(LogLevel.SUCCESS, "Badge authenticated: $operatorName")
+
+                    // Log token status
+                    if (response.token != null) {
+                        addLog(LogLevel.INFO, "JWT token received and stored")
+                    } else {
+                        addLog(LogLevel.WARNING, "No JWT token in response")
+                    }
 
                     // For now, just set authenticated state
                     // TODO: Integrate with Cognito or create user session
@@ -320,9 +354,20 @@ class LoginViewModel @Inject constructor(
 
     /**
      * Sign out the current user.
+     *
+     * Clears JWT token and user session data.
      */
     private fun signOut() {
         viewModelScope.launch {
+            try {
+                // Clear JWT token before signing out
+                userPreferences.clearJwtToken()
+                addLog(LogLevel.INFO, "JWT token cleared")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing JWT token during logout", e)
+                addLog(LogLevel.WARNING, "Failed to clear JWT token")
+            }
+
             signOutUseCase()
                 .catch { exception ->
                     Log.e(TAG, "Sign-out flow error", exception)

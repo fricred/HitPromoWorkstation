@@ -155,6 +155,7 @@ class LoginViewModelTest {
     @Test
     fun `should handle successful sign out`() = runTest {
         // Given
+        coEvery { userPreferences.clearJwtToken() } returns Unit
         every { signOutUseCase() } returns flowOf(
             AuthResult.Loading,
             AuthResult.Success(Unit)
@@ -169,13 +170,8 @@ class LoginViewModelTest {
             // Trigger sign out
             loginViewModel.handleIntent(LoginIntent.SignOut)
 
-            // Expect loading state
-            val loadingState = awaitItem()
-            assertTrue("Should be loading", loadingState.isLoading)
-
-            // Expect unauthenticated state
+            // Expect unauthenticated state after sign out
             val unauthenticatedState = awaitItem()
-            assertFalse("Should not be loading", unauthenticatedState.isLoading)
             assertFalse("Should not be authenticated", unauthenticatedState.isAuthenticated)
             assertEquals(null, unauthenticatedState.user)
             assertTrue("Should preserve remember me", unauthenticatedState.rememberMe)

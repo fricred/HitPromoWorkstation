@@ -35,6 +35,8 @@ class UserPreferences @Inject constructor(
         private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_USER_ROLE = "user_role"
         private const val KEY_LAST_LOGIN_TIME = "last_login_time"
+        private const val KEY_JWT_TOKEN = "jwt_token"
+        private const val KEY_TOKEN_EXPIRATION = "token_expiration"
 
         // Keys for standard preferences (non-sensitive data)
         private const val KEY_REMEMBER_ME = "remember_me"
@@ -78,6 +80,8 @@ class UserPreferences @Inject constructor(
     private val _userEmail = MutableStateFlow(encryptedPrefs.getString(KEY_USER_EMAIL, null))
     private val _userRole = MutableStateFlow(encryptedPrefs.getString(KEY_USER_ROLE, null))
     private val _lastLoginTime = MutableStateFlow(encryptedPrefs.getString(KEY_LAST_LOGIN_TIME, null))
+    private val _jwtToken = MutableStateFlow(encryptedPrefs.getString(KEY_JWT_TOKEN, null))
+    private val _tokenExpiration = MutableStateFlow(encryptedPrefs.getLong(KEY_TOKEN_EXPIRATION, 0L))
     private val _rememberMe = MutableStateFlow(standardPrefs.getBoolean(KEY_REMEMBER_ME, false))
 
     /**
@@ -91,6 +95,8 @@ class UserPreferences @Inject constructor(
             KEY_USER_EMAIL -> _userEmail.value = prefs.getString(key, null)
             KEY_USER_ROLE -> _userRole.value = prefs.getString(key, null)
             KEY_LAST_LOGIN_TIME -> _lastLoginTime.value = prefs.getString(key, null)
+            KEY_JWT_TOKEN -> _jwtToken.value = prefs.getString(key, null)
+            KEY_TOKEN_EXPIRATION -> _tokenExpiration.value = prefs.getLong(key, 0L)
         }
     }
 
@@ -140,6 +146,21 @@ class UserPreferences @Inject constructor(
     val lastLoginTime: Flow<String?> = _lastLoginTime.asStateFlow()
 
     /**
+     * Get JWT token for API authentication (from encrypted storage).
+     *
+     * The token is stored securely and expires after 24 hours.
+     * Always validate token expiration before using it for API requests.
+     */
+    val jwtToken: Flow<String?> = _jwtToken.asStateFlow()
+
+    /**
+     * Get JWT token expiration time in milliseconds since epoch (from encrypted storage).
+     *
+     * Use this to determine if a new authentication is needed.
+     */
+    val tokenExpiration: Flow<Long> = _tokenExpiration.asStateFlow()
+
+    /**
      * Get remember me preference (from standard storage).
      */
     val rememberMe: Flow<Boolean> = _rememberMe.asStateFlow()
@@ -182,9 +203,102 @@ class UserPreferences @Inject constructor(
     }
 
     /**
+     * Save JWT token and expiration time to encrypted storage.
+     *
+     * Stores the token securely with its expiration timestamp.
+     * The token is used for subsequent API requests.
+     *
+     * @param token JWT token string
+     * @param expirationTime Expiration time in milliseconds since epoch
+     */
+    suspend fun saveJwtToken(token: String, expirationTime: Long) {
+        try {
+            encryptedPrefs.edit().apply {
+                putString(KEY_JWT_TOKEN, token)
+                putLong(KEY_TOKEN_EXPIRATION, expirationTime)
+                apply()
+            }
+
+            Log.d(TAG, "JWT token saved successfully (expires at ${java.text.SimpleDateFormat(
+                "yyyy-MM-dd HH:mm:ss",
+                java.util.Locale.US
+            ).format(java.util.Date(expirationTime))})")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save JWT token", e)
+            throw e
+        }
+    }
+
+    /**
+     * Check if a valid JWT token is stored.
+     *
+     * @return True if token exists and is not expired, false otherwise
+     */
+    suspend fun hasValidToken(): Boolean {
+        return try {
+            val token = _jwtToken.value ?: return false
+            val expirationTime = _tokenExpiration.value
+
+            if (expirationTime <= 0L) return false
+
+            val currentTimeMs = System.currentTimeMillis()
+            val isNotExpired = currentTimeMs < expirationTime
+
+            if (!isNotExpired) {
+                Log.d(TAG, "Stored token has expired")
+                clearJwtToken()
+            }
+
+            isNotExpired
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking token validity", e)
+            false
+        }
+    }
+
+    /**
+     * Get the current JWT token if it's valid.
+     *
+     * @return JWT token string if valid, null otherwise
+     */
+    suspend fun getValidToken(): String? {
+        return try {
+            if (hasValidToken()) {
+                _jwtToken.value
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error retrieving valid token", e)
+            null
+        }
+    }
+
+    /**
+     * Clear JWT token from encrypted storage.
+     *
+     * Called when token expires or user logs out.
+     */
+    suspend fun clearJwtToken() {
+        try {
+            encryptedPrefs.edit().apply {
+                remove(KEY_JWT_TOKEN)
+                remove(KEY_TOKEN_EXPIRATION)
+                apply()
+            }
+
+            Log.d(TAG, "JWT token cleared successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear JWT token", e)
+            throw e
+        }
+    }
+
+    /**
      * Clear user session data from encrypted storage.
      *
-     * Removes all sensitive user information while preserving the remember me preference.
+     * Removes all sensitive user information (including JWT token)
+     * while preserving the remember me preference.
      */
     suspend fun clearUserSession() {
         try {
@@ -195,6 +309,8 @@ class UserPreferences @Inject constructor(
                 remove(KEY_USER_EMAIL)
                 remove(KEY_USER_ROLE)
                 remove(KEY_LAST_LOGIN_TIME)
+                remove(KEY_JWT_TOKEN)
+                remove(KEY_TOKEN_EXPIRATION)
                 apply()
             }
 
@@ -219,6 +335,51 @@ class UserPreferences @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to update remember me preference", e)
             throw e
+        }
+    }
+
+    /**
+     * Get the current JWT token synchronously (without coroutines).
+     *
+     * Used by the OkHttp interceptor which runs on the network thread.
+     * Returns null if token is missing or expired.
+     *
+     * @return Current JWT token if valid, null otherwise
+     */
+    fun getTokenSync(): String? {
+        return try {
+            val token = _jwtToken.value
+            val expirationTime = _tokenExpiration.value
+
+            // Only return token if it exists and hasn't expired
+            if (token != null && expirationTime > 0L) {
+                val currentTimeMs = System.currentTimeMillis()
+                if (currentTimeMs < expirationTime) {
+                    token
+                } else {
+                    Log.d(TAG, "Token has expired (sync access)")
+                    null
+                }
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error retrieving token synchronously", e)
+            null
+        }
+    }
+
+    /**
+     * Get the current JWT token expiration time synchronously.
+     *
+     * @return Token expiration time in milliseconds since epoch, or 0 if not set
+     */
+    fun getTokenExpirationSync(): Long {
+        return try {
+            _tokenExpiration.value
+        } catch (e: Exception) {
+            Log.e(TAG, "Error retrieving token expiration synchronously", e)
+            0L
         }
     }
 

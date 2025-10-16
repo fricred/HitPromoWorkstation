@@ -7,7 +7,8 @@ import com.squareup.moshi.JsonClass
  * Response DTO for badge lookup API.
  *
  * Contains operator information retrieved from the HR system
- * based on the scanned badge ID.
+ * based on the scanned badge ID, along with a JWT token for
+ * subsequent API requests. The token is valid for 24 hours.
  */
 @JsonClass(generateAdapter = true)
 data class BadgeLookupResponse(
@@ -18,7 +19,14 @@ data class BadgeLookupResponse(
 
     val data: OperatorData? = null,
 
-    val message: String? = null
+    val message: String? = null,
+
+    /**
+     * JWT token for authenticating subsequent API requests.
+     * Valid for 24 hours from issuance. Should be included in the
+     * Authorization header as "Bearer <token>".
+     */
+    val token: String? = null
 )
 
 /**

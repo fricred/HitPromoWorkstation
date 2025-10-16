@@ -10,6 +10,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import net.hitpromo.hitpromoworkstation.BuildConfig
+import net.hitpromo.hitpromoworkstation.data.local.UserPreferences
 import net.hitpromo.hitpromoworkstation.data.remote.BadgeApiService
 import net.hitpromo.hitpromoworkstation.data.remote.CognitoAuthDataSource
 import net.hitpromo.hitpromoworkstation.util.AndroidStringProvider
@@ -82,16 +83,30 @@ abstract class NetworkModule {
         }
 
         /**
-         * Provides OkHttpClient with logging interceptor.
+         * Provides OkHttpClient with logging and token authentication interceptors.
+         *
+         * The token interceptor is added first (before logging) to inject the
+         * Authorization header before the request is logged.
          */
         @Provides
         @Singleton
-        fun provideOkHttpClient(): OkHttpClient {
+        fun provideOkHttpClient(
+            userPreferences: UserPreferences
+        ): OkHttpClient {
             val loggingInterceptor = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                level = if (BuildConfig.DEBUG) {
+                    HttpLoggingInterceptor.Level.BODY
+                } else {
+                    HttpLoggingInterceptor.Level.BASIC
+                }
             }
 
+            val tokenInterceptor = TokenAuthInterceptor(userPreferences)
+
             return OkHttpClient.Builder()
+                // Add token interceptor first so it runs before logging
+                .addInterceptor(tokenInterceptor)
+                // Add logging interceptor to see full request/response
                 .addInterceptor(loggingInterceptor)
                 .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
