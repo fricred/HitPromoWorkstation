@@ -15,3 +15,8 @@ CLAUDE.md
 
 # AWS Amplify configuration - DO NOT commit actual config files
 app/src/main/res/raw/amplifyconfiguration.json
+
+# Keystore files - DO NOT commit signing credentials
+keystore.properties
+*.jks
+*.keystore
