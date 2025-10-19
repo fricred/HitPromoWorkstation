@@ -42,7 +42,7 @@ android {
 
         // API Base URL - Change this when Fargate IP changes
         // Example: "http://54.165.122.247:8000/"
-        buildConfigField("String", "API_BASE_URL", "\"http://54.165.122.247:8000/\"")
+        buildConfigField("String", "API_BASE_URL", "\"http://192.168.0.18:8001/\"")
 
         vectorDrawables {
             useSupportLibrary = true

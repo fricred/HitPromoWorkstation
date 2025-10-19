@@ -142,6 +142,22 @@ fun IndustrialWorkstationApp(
                 onClearLogs = {
                     viewModel.handleIntent(LoginIntent.ClearLogs)
                 },
+                // Form input parameters (two-step authentication)
+                badgeId = uiState.badgeId,
+                onBadgeIdChange = { newBadgeId ->
+                    viewModel.handleIntent(LoginIntent.UpdateBadgeId(newBadgeId))
+                },
+                machineId = uiState.machineId,
+                onMachineIdChange = { newMachineId ->
+                    viewModel.handleIntent(LoginIntent.UpdateMachineId(newMachineId))
+                },
+                onSubmitForm = { badgeId, machineId ->
+                    viewModel.handleIntent(LoginIntent.SubmitLoginForm(badgeId, machineId))
+                },
+                isWorkersLoginInProgress = uiState.isWorkersLoginInProgress,
+                onRetryWorkersLogin = {
+                    viewModel.handleIntent(LoginIntent.RetryWorkersLogin)
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }

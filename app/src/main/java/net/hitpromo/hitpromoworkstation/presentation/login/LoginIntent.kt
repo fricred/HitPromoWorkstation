@@ -52,6 +52,30 @@ sealed class LoginIntent {
     data object ClearPasswordChangeState : LoginIntent()
 
     // ========================================
+    // Form input intents (two-step authentication)
+    // ========================================
+
+    /**
+     * User updated the badge ID input field.
+     */
+    data class UpdateBadgeId(val badgeId: String) : LoginIntent()
+
+    /**
+     * User updated the machine ID input field.
+     */
+    data class UpdateMachineId(val machineId: String) : LoginIntent()
+
+    /**
+     * User submitted the login form (badge ID + machine ID).
+     */
+    data class SubmitLoginForm(val badgeId: String, val machineId: String) : LoginIntent()
+
+    /**
+     * User wants to retry workers login after failure.
+     */
+    data object RetryWorkersLogin : LoginIntent()
+
+    // ========================================
     // Scanner-specific intents
     // ========================================
 

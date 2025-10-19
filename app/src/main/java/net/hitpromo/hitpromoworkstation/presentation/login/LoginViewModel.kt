@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import net.hitpromo.hitpromoworkstation.data.local.UserPreferences
 import net.hitpromo.hitpromoworkstation.domain.model.AuthResult
 import net.hitpromo.hitpromoworkstation.domain.repository.BadgeAuthRepository
+import net.hitpromo.hitpromoworkstation.domain.repository.WorkersLoginRepository
 import net.hitpromo.hitpromoworkstation.domain.scanner.LogLevel
 import net.hitpromo.hitpromoworkstation.domain.scanner.ScannerEventDelegate
 import net.hitpromo.hitpromoworkstation.domain.scanner.ScannerSDKManager
@@ -41,7 +42,8 @@ class LoginViewModel @Inject constructor(
     private val signOutUseCase: SignOutUseCase,
     private val userPreferences: UserPreferences,
     private val scannerSDKManager: ScannerSDKManager,
-    private val badgeAuthRepository: BadgeAuthRepository
+    private val badgeAuthRepository: BadgeAuthRepository,
+    private val workersLoginRepository: WorkersLoginRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState.Initial)
@@ -148,6 +150,19 @@ class LoginViewModel @Inject constructor(
             }
             is LoginIntent.ClearPasswordChangeState -> {
                 clearPasswordChangeState()
+            }
+            // Form input intents
+            is LoginIntent.UpdateBadgeId -> {
+                updateBadgeId(intent.badgeId)
+            }
+            is LoginIntent.UpdateMachineId -> {
+                updateMachineId(intent.machineId)
+            }
+            is LoginIntent.SubmitLoginForm -> {
+                submitLoginForm(intent.badgeId, intent.machineId)
+            }
+            is LoginIntent.RetryWorkersLogin -> {
+                retryWorkersLogin()
             }
             // Scanner intents
             is LoginIntent.StartScanning -> {
@@ -482,6 +497,185 @@ class LoginViewModel @Inject constructor(
             passwordChangeUsername = null,
             passwordChangeSessionId = null
         )
+    }
+
+    /**
+     * Update badge ID input field.
+     */
+    private fun updateBadgeId(badgeId: String) {
+        _uiState.value = _uiState.value.copy(
+            badgeId = badgeId,
+            errorMessage = null
+        )
+    }
+
+    /**
+     * Update machine ID input field.
+     */
+    private fun updateMachineId(machineId: String) {
+        _uiState.value = _uiState.value.copy(
+            machineId = machineId,
+            errorMessage = null
+        )
+    }
+
+    /**
+     * Submit the login form with badge ID and machine ID.
+     *
+     * Performs two-step authentication:
+     * 1. Authenticate with badge ID to get JWT token
+     * 2. Submit worker login with badge data and machine ID
+     */
+    private fun submitLoginForm(badgeId: String, machineId: String) {
+        viewModelScope.launch {
+            try {
+                // Validate inputs
+                val sanitizedBadgeId = badgeId.trim()
+                val sanitizedMachineId = machineId.trim()
+
+                if (sanitizedBadgeId.isEmpty()) {
+                    Log.w(TAG, "Badge ID is empty")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "Badge ID is required"
+                    )
+                    return@launch
+                }
+
+                if (sanitizedMachineId.isEmpty()) {
+                    Log.w(TAG, "Machine ID is empty")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "Machine ID is required"
+                    )
+                    return@launch
+                }
+
+                if (sanitizedBadgeId.length > 50) {
+                    Log.w(TAG, "Badge ID exceeds maximum length: ${sanitizedBadgeId.length}")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "Invalid badge ID format"
+                    )
+                    return@launch
+                }
+
+                if (sanitizedMachineId.length > 100) {
+                    Log.w(TAG, "Machine ID exceeds maximum length: ${sanitizedMachineId.length}")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "Invalid machine ID format"
+                    )
+                    return@launch
+                }
+
+                Log.d(TAG, "Form validation passed, starting badge authentication")
+                addLog(LogLevel.INFO, "Authenticating badge")
+
+                // Set loading state
+                _uiState.value = _uiState.value.copy(
+                    isLoading = true,
+                    errorMessage = null
+                )
+
+                // Step 1: Authenticate with badge
+                val badgeResult = badgeAuthRepository.authenticateWithBadge(sanitizedBadgeId)
+
+                if (badgeResult.isFailure) {
+                    val error = badgeResult.exceptionOrNull()
+                    val errorMessage = error?.message ?: "Badge authentication failed"
+                    Log.e(TAG, errorMessage, error)
+                    addLog(LogLevel.ERROR, errorMessage)
+
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = errorMessage
+                    )
+                    return@launch
+                }
+
+                val badgeResponse = badgeResult.getOrThrow()
+                val jwtToken = badgeResponse.token
+
+                if (jwtToken.isNullOrEmpty()) {
+                    Log.e(TAG, "No JWT token received from badge authentication")
+                    addLog(LogLevel.ERROR, "No JWT token received")
+
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "Badge authentication failed: no token received"
+                    )
+                    return@launch
+                }
+
+                Log.d(TAG, "Badge authentication successful, proceeding to workers login")
+                addLog(LogLevel.SUCCESS, "Badge authenticated")
+
+                // Extract operator data from badge response
+                val operatorName = badgeResponse.data?.name ?: "Unknown"
+                val workerEmail = badgeResponse.data?.firstName ?: ""
+                val firstName = badgeResponse.data?.firstName ?: ""
+                val lastName = badgeResponse.data?.lastName ?: ""
+
+                Log.d(TAG, "Badge operator: $operatorName ($firstName $lastName)")
+                addLog(LogLevel.INFO, "Starting workers login")
+
+                // Set state to indicate workers login is in progress
+                _uiState.value = _uiState.value.copy(
+                    isWorkersLoginInProgress = true
+                )
+
+                // Step 2: Submit workers login
+                val workersResult = workersLoginRepository.loginWorker(
+                    machineId = sanitizedMachineId,
+                    workerId = sanitizedBadgeId,
+                    workerName = operatorName,
+                    workerEmail = workerEmail,
+                    jwtToken = jwtToken
+                )
+
+                if (workersResult.isFailure) {
+                    val error = workersResult.exceptionOrNull()
+                    val errorMessage = error?.message ?: "Workers login failed"
+                    Log.e(TAG, errorMessage, error)
+                    addLog(LogLevel.ERROR, errorMessage)
+
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isWorkersLoginInProgress = false,
+                        errorMessage = errorMessage
+                    )
+                    return@launch
+                }
+
+                val workersResponse = workersResult.getOrThrow()
+                Log.d(TAG, "Workers login successful: session_id=${workersResponse.sessionId}, status=${workersResponse.status}")
+                addLog(LogLevel.SUCCESS, "Workers login successful")
+
+                // Store session ID
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isWorkersLoginInProgress = false,
+                    isAuthenticated = true,
+                    sessionId = workersResponse.sessionId,
+                    errorMessage = null
+                )
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Login form submission error", e)
+                addLog(LogLevel.ERROR, "Login error: ${e.message}")
+
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isWorkersLoginInProgress = false,
+                    errorMessage = "Login failed: ${e.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * Retry workers login after failure with same badge and machine IDs.
+     */
+    private fun retryWorkersLogin() {
+        val currentState = _uiState.value
+        submitLoginForm(currentState.badgeId, currentState.machineId)
     }
 
     /**

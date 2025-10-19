@@ -29,10 +29,13 @@ class TokenAuthInterceptor(
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
+        val requestUrl = originalRequest.url.toString()
+
+        Log.d(TAG, "Intercepting request to: $requestUrl")
 
         // Skip adding token if Authorization header already present
         if (originalRequest.headers[AUTHORIZATION_HEADER] != null) {
-            Log.d(TAG, "Authorization header already present, skipping token injection")
+            Log.d(TAG, "Authorization header already present, skipping token injection for: $requestUrl")
             return chain.proceed(originalRequest)
         }
 
@@ -40,18 +43,26 @@ class TokenAuthInterceptor(
         val token = try {
             userPreferences.getTokenSync()
         } catch (e: Exception) {
-            Log.e(TAG, "Error retrieving valid token", e)
+            Log.e(TAG, "Error retrieving valid token for $requestUrl", e)
             null
         }
 
         return if (token != null) {
+            val tokenLength = token.length
+            val tokenPreview = if (tokenLength > 20) token.substring(0, 20) + "..." else token
+
+            Log.d(TAG, "Adding Authorization header for: $requestUrl (token length: $tokenLength)")
+            Log.d(TAG, "Token preview: $tokenPreview")
+
             val newRequest = originalRequest.newBuilder()
                 .addHeader(AUTHORIZATION_HEADER, "$BEARER_PREFIX$token")
                 .build()
 
+            Log.d(TAG, "Proceeding with authenticated request to: $requestUrl")
             chain.proceed(newRequest)
         } else {
-            Log.d(TAG, "No valid token available, proceeding without authentication header")
+            Log.w(TAG, "No valid token available, proceeding WITHOUT authentication header for: $requestUrl")
+            Log.w(TAG, "Token retrieval returned null - token may be expired or not yet set")
             chain.proceed(originalRequest)
         }
     }

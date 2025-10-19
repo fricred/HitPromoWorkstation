@@ -37,6 +37,8 @@ class UserPreferences @Inject constructor(
         private const val KEY_LAST_LOGIN_TIME = "last_login_time"
         private const val KEY_JWT_TOKEN = "jwt_token"
         private const val KEY_TOKEN_EXPIRATION = "token_expiration"
+        private const val KEY_SESSION_ID = "session_id"
+        private const val KEY_MACHINE_ID = "machine_id"
 
         // Keys for standard preferences (non-sensitive data)
         private const val KEY_REMEMBER_ME = "remember_me"
@@ -82,6 +84,8 @@ class UserPreferences @Inject constructor(
     private val _lastLoginTime = MutableStateFlow(encryptedPrefs.getString(KEY_LAST_LOGIN_TIME, null))
     private val _jwtToken = MutableStateFlow(encryptedPrefs.getString(KEY_JWT_TOKEN, null))
     private val _tokenExpiration = MutableStateFlow(encryptedPrefs.getLong(KEY_TOKEN_EXPIRATION, 0L))
+    private val _sessionId = MutableStateFlow(encryptedPrefs.getString(KEY_SESSION_ID, null))
+    private val _machineId = MutableStateFlow(encryptedPrefs.getString(KEY_MACHINE_ID, null))
     private val _rememberMe = MutableStateFlow(standardPrefs.getBoolean(KEY_REMEMBER_ME, false))
 
     /**
@@ -97,6 +101,8 @@ class UserPreferences @Inject constructor(
             KEY_LAST_LOGIN_TIME -> _lastLoginTime.value = prefs.getString(key, null)
             KEY_JWT_TOKEN -> _jwtToken.value = prefs.getString(key, null)
             KEY_TOKEN_EXPIRATION -> _tokenExpiration.value = prefs.getLong(key, 0L)
+            KEY_SESSION_ID -> _sessionId.value = prefs.getString(key, null)
+            KEY_MACHINE_ID -> _machineId.value = prefs.getString(key, null)
         }
     }
 
@@ -159,6 +165,16 @@ class UserPreferences @Inject constructor(
      * Use this to determine if a new authentication is needed.
      */
     val tokenExpiration: Flow<Long> = _tokenExpiration.asStateFlow()
+
+    /**
+     * Get session ID from worker login (from encrypted storage).
+     */
+    val sessionId: Flow<String?> = _sessionId.asStateFlow()
+
+    /**
+     * Get machine ID from worker login (from encrypted storage).
+     */
+    val machineId: Flow<String?> = _machineId.asStateFlow()
 
     /**
      * Get remember me preference (from standard storage).
@@ -311,12 +327,53 @@ class UserPreferences @Inject constructor(
                 remove(KEY_LAST_LOGIN_TIME)
                 remove(KEY_JWT_TOKEN)
                 remove(KEY_TOKEN_EXPIRATION)
+                remove(KEY_SESSION_ID)
+                remove(KEY_MACHINE_ID)
                 apply()
             }
 
             Log.d(TAG, "User session cleared successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear user session", e)
+            throw e
+        }
+    }
+
+    /**
+     * Save session ID and machine ID from worker login to encrypted storage.
+     *
+     * @param sessionId Session ID from worker login response
+     * @param machineId Machine ID where worker is logged in
+     */
+    suspend fun saveSessionId(sessionId: String) {
+        try {
+            encryptedPrefs.edit().apply {
+                putString(KEY_SESSION_ID, sessionId)
+                apply()
+            }
+
+            Log.d(TAG, "Session ID saved successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save session ID", e)
+            throw e
+        }
+    }
+
+    /**
+     * Save machine ID to encrypted storage.
+     *
+     * @param machineId Machine ID where worker is logged in
+     */
+    suspend fun saveMachineId(machineId: String) {
+        try {
+            encryptedPrefs.edit().apply {
+                putString(KEY_MACHINE_ID, machineId)
+                apply()
+            }
+
+            Log.d(TAG, "Machine ID saved successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save machine ID", e)
             throw e
         }
     }
@@ -351,16 +408,26 @@ class UserPreferences @Inject constructor(
             val token = _jwtToken.value
             val expirationTime = _tokenExpiration.value
 
+            Log.d(TAG, "=== getTokenSync called ===")
+            Log.d(TAG, "Token present: ${token != null}")
+            Log.d(TAG, "Token length: ${token?.length ?: 0}")
+            Log.d(TAG, "Expiration time: $expirationTime")
+
             // Only return token if it exists and hasn't expired
             if (token != null && expirationTime > 0L) {
                 val currentTimeMs = System.currentTimeMillis()
+                Log.d(TAG, "Current time: $currentTimeMs")
+                Log.d(TAG, "Time until expiration: ${(expirationTime - currentTimeMs) / 1000L} seconds")
+
                 if (currentTimeMs < expirationTime) {
+                    Log.d(TAG, "Token is VALID - returning token")
                     token
                 } else {
-                    Log.d(TAG, "Token has expired (sync access)")
+                    Log.w(TAG, "Token has EXPIRED (sync access)")
                     null
                 }
             } else {
+                Log.w(TAG, "Token is NULL or expiration invalid")
                 null
             }
         } catch (e: Exception) {

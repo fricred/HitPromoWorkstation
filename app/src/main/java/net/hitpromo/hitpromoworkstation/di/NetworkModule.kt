@@ -13,6 +13,7 @@ import net.hitpromo.hitpromoworkstation.BuildConfig
 import net.hitpromo.hitpromoworkstation.data.local.UserPreferences
 import net.hitpromo.hitpromoworkstation.data.remote.BadgeApiService
 import net.hitpromo.hitpromoworkstation.data.remote.CognitoAuthDataSource
+import net.hitpromo.hitpromoworkstation.data.remote.WorkersApiService
 import net.hitpromo.hitpromoworkstation.util.AndroidStringProvider
 import net.hitpromo.hitpromoworkstation.util.NetworkMonitor
 import net.hitpromo.hitpromoworkstation.util.StringProvider
@@ -41,7 +42,7 @@ abstract class NetworkModule {
 
     companion object {
         // Base URL is configured in app/build.gradle.kts
-        // Change API_BASE_URL in build.gradle.kts when Fargate IP changes
+        // ALL API endpoints use this single base URL
         private val BASE_URL = BuildConfig.API_BASE_URL
         private const val TIMEOUT_SECONDS = 30L
 
@@ -103,6 +104,11 @@ abstract class NetworkModule {
 
             val tokenInterceptor = TokenAuthInterceptor(userPreferences)
 
+            android.util.Log.d(
+                "NetworkModule",
+                "Creating OkHttpClient with interceptors. Base URL: $BASE_URL"
+            )
+
             return OkHttpClient.Builder()
                 // Add token interceptor first so it runs before logging
                 .addInterceptor(tokenInterceptor)
@@ -115,7 +121,10 @@ abstract class NetworkModule {
         }
 
         /**
-         * Provides Retrofit instance configured for badge API.
+         * Provides Retrofit instance for all API endpoints.
+         *
+         * All API requests (badge, workers, etc) use this single Retrofit instance
+         * which is configured with the OkHttpClient that includes TokenAuthInterceptor.
          */
         @Provides
         @Singleton
@@ -123,6 +132,10 @@ abstract class NetworkModule {
             okHttpClient: OkHttpClient,
             moshi: Moshi
         ): Retrofit {
+            android.util.Log.d(
+                "NetworkModule",
+                "Creating Retrofit instance with base URL: $BASE_URL"
+            )
             return Retrofit.Builder()
                 .baseUrl(BASE_URL)
                 .client(okHttpClient)
@@ -137,6 +150,18 @@ abstract class NetworkModule {
         @Singleton
         fun provideBadgeApiService(retrofit: Retrofit): BadgeApiService {
             return retrofit.create(BadgeApiService::class.java)
+        }
+
+        /**
+         * Provides WorkersApiService instance.
+         *
+         * Uses the same Retrofit instance as BadgeApiService, ensuring all requests
+         * are authenticated via TokenAuthInterceptor.
+         */
+        @Provides
+        @Singleton
+        fun provideWorkersApiService(retrofit: Retrofit): WorkersApiService {
+            return retrofit.create(WorkersApiService::class.java)
         }
     }
 }

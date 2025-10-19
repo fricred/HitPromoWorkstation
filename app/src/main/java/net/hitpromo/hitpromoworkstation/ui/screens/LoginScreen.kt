@@ -1,6 +1,5 @@
 package net.hitpromo.hitpromoworkstation.ui.screens
 
-import android.content.res.Configuration
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -20,11 +19,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -61,14 +61,13 @@ import net.hitpromo.hitpromoworkstation.ui.theme.SafetyGreen
 import net.hitpromo.hitpromoworkstation.ui.theme.WarningAmber
 
 /**
- * Badge Scanning Login Screen for Hit Promotional Products Workstation
+ * Form-based Login Screen for Hit Promotional Products Workstation
  *
- * Optimized for Samsung Galaxy Tab A9+ (11" landscape) with Zebra LS2208 barcode scanner:
- * - Zebra LS2208 acts as keyboard wedge (types badge ID + Enter)
+ * Optimized for Samsung Galaxy Tab A9+ (11" landscape) with form input:
+ * - Badge ID input field (supports keyboard wedge scanner input)
+ * - Machine ID input field
  * - Large touch targets for gloved operation
  * - High contrast colors for production floor lighting
- * - Clean, centered design with prominent logo
- * - Simple one-button interface
  * - Scanner status display and debug logs for troubleshooting
  */
 @Composable
@@ -85,33 +84,42 @@ fun LoginScreen(
     showDebugModal: Boolean = false,
     onToggleDebugLogs: () -> Unit = {},
     onCopyLogs: () -> Unit = {},
-    onClearLogs: () -> Unit = {}
+    onClearLogs: () -> Unit = {},
+    badgeId: String = "",
+    onBadgeIdChange: (String) -> Unit = {},
+    machineId: String = "",
+    onMachineIdChange: (String) -> Unit = {},
+    onSubmitForm: (badgeId: String, machineId: String) -> Unit = { _, _ -> },
+    isWorkersLoginInProgress: Boolean = false,
+    onRetryWorkersLogin: () -> Unit = {}
 ) {
     var scannedInput by remember { mutableStateOf("") }
-    val focusRequester = remember { FocusRequester() }
+    val badgeIdFocusRequester = remember { FocusRequester() }
+    val machineIdFocusRequester = remember { FocusRequester() }
+    val scannerFocusRequester = remember { FocusRequester() }
 
     // Get screen dimensions for responsive layout
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
 
-    // Responsive sizing based on screen width
-    // Small phones (< 600dp), tablets (>= 600dp)
+    // Responsive sizing
     val isTablet = screenWidth >= 600.dp
 
-    val logoPadding = if (isTablet) 48.dp else 16.dp
-    val logoSize = if (isTablet) 180.dp else 100.dp
-    val debugButtonPadding = if (isTablet) 48.dp else 16.dp
-    val debugButtonSize = if (isTablet) 64.dp else 48.dp
-    val debugIconSize = if (isTablet) 48.dp else 32.dp
-    val contentWidth = if (isTablet) 600.dp else screenWidth * 0.9f
-    val buttonHeight = if (isTablet) 64.dp else 56.dp
-    val statusBarPadding = if (isTablet) 32.dp else 16.dp
-    val statusTextSize = if (isTablet) 16.sp else 14.sp
+    val logoPadding = if (isTablet) 32.dp else 16.dp
+    val logoSize = if (isTablet) 140.dp else 80.dp
+    val debugButtonPadding = if (isTablet) 32.dp else 16.dp
+    val debugButtonSize = if (isTablet) 56.dp else 48.dp
+    val debugIconSize = if (isTablet) 40.dp else 32.dp
+    val contentWidth = if (isTablet) 500.dp else screenWidth * 0.85f
+    val buttonHeight = if (isTablet) 56.dp else 48.dp
+    val fieldSpacing = if (isTablet) 20.dp else 16.dp
+    val statusBarPadding = if (isTablet) 24.dp else 16.dp
+    val statusTextSize = if (isTablet) 14.sp else 12.sp
 
-    // Focus the invisible text field when ready to scan
+    // Focus badge ID field when ready to scan
     LaunchedEffect(isReadyToScan) {
         if (isReadyToScan) {
-            focusRequester.requestFocus()
+            scannerFocusRequester.requestFocus()
         }
     }
 
@@ -146,135 +154,207 @@ fun LoginScreen(
             )
         }
 
-        // Centered content area
-        Column(
+        // Centered form area inside Card
+        Card(
             modifier = Modifier
                 .align(Alignment.Center)
                 .width(contentWidth)
                 .padding(horizontal = if (isTablet) 0.dp else 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 4.dp
+            )
         ) {
-            // Status message or error
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(48.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 4.dp
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // Main title
                 Text(
-                    text = "Authenticating...",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            } else if (isReadyToScan) {
-                Text(
-                    text = "Ready to scan...",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center
-                )
-            } else if (errorMessage != null) {
-                IndustrialStatusText(
-                    text = errorMessage,
-                    isError = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Show manual input when scanner is not detected
-            if (scannerStatus == ScannerStatus.ScannerNotFound || scannerStatus == ScannerStatus.Error) {
-                var manualInput by remember { mutableStateOf("") }
-
-                Text(
-                    text = "Scanner not available - Enter Operator ID manually",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = WarningAmber,
+                    text = "Login Information",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = if (isTablet) 28.sp else 24.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // Subtitle
+                Text(
+                    text = "Enter your badge and machine details",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+
+                // Error message
+                if (errorMessage != null) {
+                    IndustrialStatusText(
+                        text = errorMessage,
+                        isError = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                    )
+                }
+
+                // Badge ID label and input field
+                Text(
+                    text = "Scan or enter your BadgeID",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .padding(bottom = 8.dp)
                 )
 
                 TextField(
-                    value = manualInput,
-                    onValueChange = { manualInput = it },
-                    label = { Text("Operator ID") },
-                    placeholder = { Text("A000004892") },
+                    value = badgeId,
+                    onValueChange = onBadgeIdChange,
+                    placeholder = { Text("Enter Badge ID", color = Color.Gray) },
                     singleLine = true,
-                    enabled = !isLoading,
+                    enabled = !isLoading && !isWorkersLoginInProgress,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(buttonHeight),
+                        .height(buttonHeight)
+                        .focusRequester(badgeIdFocusRequester),
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
                         focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                        unfocusedIndicatorColor = MaterialTheme.colorScheme.outline
+                        unfocusedIndicatorColor = Color.LightGray
                     ),
                     shape = RoundedCornerShape(8.dp),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = if (isTablet) 18.sp else 16.sp),
-                    keyboardOptions = KeyboardOptions(
-                        imeAction = ImeAction.Done
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = if (isTablet) 16.sp else 14.sp
                     ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(
+                        onNext = { machineIdFocusRequester.requestFocus() }
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(fieldSpacing))
+
+                // Machine ID label and input field
+                Text(
+                    text = "Enter the Machine ID",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .padding(bottom = 8.dp)
+                )
+
+                TextField(
+                    value = machineId,
+                    onValueChange = onMachineIdChange,
+                    placeholder = { Text("Enter Machine ID", color = Color.Gray) },
+                    singleLine = true,
+                    enabled = !isLoading && !isWorkersLoginInProgress,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(buttonHeight)
+                        .focusRequester(machineIdFocusRequester),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                        unfocusedIndicatorColor = Color.LightGray
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = if (isTablet) 16.sp else 14.sp
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(
                         onDone = {
-                            if (manualInput.isNotBlank()) {
-                                onBadgeScan(manualInput.trim())
-                                manualInput = ""
+                            if (badgeId.isNotBlank() && machineId.isNotBlank()) {
+                                onSubmitForm(badgeId, machineId)
                             }
                         }
                     )
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
+                // Loading state indicator
+                if (isLoading || isWorkersLoginInProgress) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(32.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 3.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = if (isWorkersLoginInProgress) "Registering worker..." else "Authenticating...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                // Submit button
                 IndustrialButton(
-                    text = "Login",
-                    onClick = {
-                        if (manualInput.isNotBlank()) {
-                            onBadgeScan(manualInput.trim())
-                            manualInput = ""
-                        }
-                    },
-                    isLoading = isLoading,
-                    enabled = !isLoading && manualInput.isNotBlank(),
+                    text = "Submit",
+                    onClick = { onSubmitForm(badgeId, machineId) },
+                    isLoading = isLoading || isWorkersLoginInProgress,
+                    enabled = !isLoading && !isWorkersLoginInProgress && badgeId.isNotBlank() && machineId.isNotBlank(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(buttonHeight)
                 )
-            } else {
-                // Main action button - "Scan ID to Login"
-                IndustrialButton(
-                    text = "Scan ID to Login",
-                    onClick = {
-                        scannedInput = ""
-                        onReadyToScan()
-                    },
-                    isLoading = isLoading,
-                    enabled = !isLoading && !isReadyToScan,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(buttonHeight)
-                )
+
+                // Retry button (shown when workers login fails)
+                if (!isLoading && isWorkersLoginInProgress && errorMessage != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    IndustrialButton(
+                        text = "Retry",
+                        onClick = onRetryWorkersLogin,
+                        isLoading = false,
+                        enabled = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(buttonHeight)
+                    )
+                }
             }
         }
 
-        // Invisible text field to capture scanner input
-        // The Zebra LS2208 scanner acts as a keyboard wedge
+        // Invisible text field to capture scanner input for badge ID field
         TextField(
             value = scannedInput,
             onValueChange = { scannedInput = it },
             modifier = Modifier
                 .size(1.dp)
-                .focusRequester(focusRequester)
+                .focusRequester(scannerFocusRequester)
                 .onKeyEvent { keyEvent ->
-                    // Detect Enter key press (scanner sends Enter after badge ID)
                     if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER) {
                         if (scannedInput.isNotBlank()) {
-                            onBadgeScan(scannedInput.trim())
+                            onBadgeIdChange(scannedInput.trim())
                             scannedInput = ""
+                            machineIdFocusRequester.requestFocus()
                         }
                         true
                     } else {
@@ -287,13 +367,11 @@ fun LoginScreen(
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent
             ),
-            keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Done
-            ),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
                 onDone = {
                     if (scannedInput.isNotBlank()) {
-                        onBadgeScan(scannedInput.trim())
+                        onBadgeIdChange(scannedInput.trim())
                         scannedInput = ""
                     }
                 }
@@ -344,89 +422,76 @@ fun LoginScreen(
 }
 
 @Preview(
-    name = "Badge Scan Login - Landscape",
+    name = "Form Login - Landscape",
     widthDp = 1280,
     heightDp = 800,
     showBackground = true
 )
 @Composable
-fun BadgeScanLoginScreenPreview() {
+fun FormLoginScreenPreview() {
     HitPromoWorkstationTheme {
         LoginScreen(
             onBadgeScan = { },
             onReadyToScan = { },
             isLoading = false,
             isReadyToScan = false,
-            errorMessage = null
+            errorMessage = null,
+            badgeId = "",
+            machineId = ""
         )
     }
 }
 
 @Preview(
-    name = "Badge Scan Login - Ready to Scan",
+    name = "Form Login - Loading",
     widthDp = 1280,
     heightDp = 800,
     showBackground = true
 )
 @Composable
-fun BadgeScanLoginReadyPreview() {
-    HitPromoWorkstationTheme {
-        LoginScreen(
-            onBadgeScan = { },
-            onReadyToScan = { },
-            isLoading = false,
-            isReadyToScan = true,
-            errorMessage = null
-        )
-    }
-}
-
-@Preview(
-    name = "Badge Scan Login - Loading",
-    widthDp = 1280,
-    heightDp = 800,
-    showBackground = true
-)
-@Composable
-fun BadgeScanLoginLoadingPreview() {
+fun FormLoginLoadingPreview() {
     HitPromoWorkstationTheme {
         LoginScreen(
             onBadgeScan = { },
             onReadyToScan = { },
             isLoading = true,
             isReadyToScan = false,
-            errorMessage = null
+            errorMessage = null,
+            badgeId = "A000004892",
+            machineId = "M-001"
         )
     }
 }
 
 @Preview(
-    name = "Badge Scan Login - Error",
+    name = "Form Login - Error",
     widthDp = 1280,
     heightDp = 800,
     showBackground = true
 )
 @Composable
-fun BadgeScanLoginErrorPreview() {
+fun FormLoginErrorPreview() {
     HitPromoWorkstationTheme {
         LoginScreen(
             onBadgeScan = { },
             onReadyToScan = { },
             isLoading = false,
             isReadyToScan = false,
-            errorMessage = "Invalid badge ID. Please try again."
+            errorMessage = "Badge authentication failed. Please try again.",
+            badgeId = "A000004892",
+            machineId = "M-001"
         )
     }
 }
 
 @Preview(
-    name = "Badge Scan Login - Phone Portrait",
-    widthDp = 360,
-    heightDp = 640,
+    name = "Form Login - Tablet Landscape",
+    widthDp = 1024,
+    heightDp = 768,
     showBackground = true
 )
 @Composable
-fun BadgeScanLoginPhonePreview() {
+fun FormLoginTabletPreview() {
     HitPromoWorkstationTheme {
         LoginScreen(
             onBadgeScan = { },
@@ -434,26 +499,8 @@ fun BadgeScanLoginPhonePreview() {
             isLoading = false,
             isReadyToScan = false,
             errorMessage = null,
-            scannerStatus = ScannerStatus.ScannerNotFound
-        )
-    }
-}
-
-@Preview(
-    name = "Badge Scan Login - Phone Landscape",
-    widthDp = 640,
-    heightDp = 360,
-    showBackground = true
-)
-@Composable
-fun BadgeScanLoginPhoneLandscapePreview() {
-    HitPromoWorkstationTheme {
-        LoginScreen(
-            onBadgeScan = { },
-            onReadyToScan = { },
-            isLoading = false,
-            isReadyToScan = false,
-            errorMessage = null,
+            badgeId = "",
+            machineId = "",
             scannerStatus = ScannerStatus.Connected,
             scannerName = "LS2208"
         )

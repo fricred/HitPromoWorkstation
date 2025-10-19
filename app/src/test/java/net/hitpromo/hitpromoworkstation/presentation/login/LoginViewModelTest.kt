@@ -8,10 +8,14 @@ import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import net.hitpromo.hitpromoworkstation.data.local.UserPreferences
+import net.hitpromo.hitpromoworkstation.data.model.BadgeLookupResponse
+import net.hitpromo.hitpromoworkstation.data.model.OperatorData
+import net.hitpromo.hitpromoworkstation.data.remote.dto.WorkerLoginResponse
 import net.hitpromo.hitpromoworkstation.domain.model.AuthResult
 import net.hitpromo.hitpromoworkstation.domain.model.User
 import net.hitpromo.hitpromoworkstation.domain.model.UserRole
 import net.hitpromo.hitpromoworkstation.domain.repository.BadgeAuthRepository
+import net.hitpromo.hitpromoworkstation.domain.repository.WorkersLoginRepository
 import net.hitpromo.hitpromoworkstation.domain.scanner.ScannerSDKManager
 import net.hitpromo.hitpromoworkstation.domain.usecase.SignInUseCase
 import net.hitpromo.hitpromoworkstation.domain.usecase.SignOutUseCase
@@ -35,6 +39,7 @@ class LoginViewModelTest {
     private lateinit var userPreferences: UserPreferences
     private lateinit var scannerSDKManager: ScannerSDKManager
     private lateinit var badgeAuthRepository: BadgeAuthRepository
+    private lateinit var workersLoginRepository: WorkersLoginRepository
     private lateinit var loginViewModel: LoginViewModel
 
     private val mockUser = User(
@@ -53,6 +58,7 @@ class LoginViewModelTest {
         userPreferences = mockk()
         scannerSDKManager = mockk(relaxed = true)
         badgeAuthRepository = mockk(relaxed = true)
+        workersLoginRepository = mockk(relaxed = true)
 
         // Default mock behaviors
         every { userPreferences.isLoggedIn } returns flowOf(false)
@@ -61,6 +67,8 @@ class LoginViewModelTest {
         every { userPreferences.username } returns flowOf(null)
         every { userPreferences.userEmail } returns flowOf(null)
         coEvery { userPreferences.setRememberMe(any()) } returns Unit
+        coEvery { userPreferences.saveSessionId(any()) } returns Unit
+        coEvery { userPreferences.saveMachineId(any()) } returns Unit
 
         loginViewModel = LoginViewModel(
             context,
@@ -68,7 +76,8 @@ class LoginViewModelTest {
             signOutUseCase,
             userPreferences,
             scannerSDKManager,
-            badgeAuthRepository
+            badgeAuthRepository,
+            workersLoginRepository
         )
     }
 
@@ -245,6 +254,7 @@ class LoginViewModelTest {
         val testContext = mockk<Context>(relaxed = true)
         val testScannerManager = mockk<ScannerSDKManager>(relaxed = true)
         val testBadgeAuthRepo = mockk<BadgeAuthRepository>(relaxed = true)
+        val testWorkersLoginRepo = mockk<WorkersLoginRepository>(relaxed = true)
 
         val viewModel = LoginViewModel(
             testContext,
@@ -252,7 +262,8 @@ class LoginViewModelTest {
             signOutUseCase,
             userPreferences,
             testScannerManager,
-            testBadgeAuthRepo
+            testBadgeAuthRepo,
+            testWorkersLoginRepo
         )
 
         // Then
@@ -260,6 +271,44 @@ class LoginViewModelTest {
             val initialState = awaitItem()
             assertTrue(initialState.rememberMe)
             assertFalse(initialState.isAuthenticated)
+        }
+    }
+
+    @Test
+    fun `should update badge ID field`() = runTest {
+        val badgeId = "A000004892"
+
+        loginViewModel.uiState.test {
+            // Skip initial state
+            skipItems(1)
+
+            // Update badge ID
+            loginViewModel.handleIntent(LoginIntent.UpdateBadgeId(badgeId))
+
+            // Verify state update
+            val updatedState = awaitItem()
+            assertEquals(badgeId, updatedState.badgeId)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `should update machine ID field`() = runTest {
+        val machineId = "M-001"
+
+        loginViewModel.uiState.test {
+            // Skip initial state
+            skipItems(1)
+
+            // Update machine ID
+            loginViewModel.handleIntent(LoginIntent.UpdateMachineId(machineId))
+
+            // Verify state update
+            val updatedState = awaitItem()
+            assertEquals(machineId, updatedState.machineId)
+
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }

@@ -8,8 +8,13 @@
         </trust-anchors>
     </base-config>
 
-    <!-- Specific domain configuration for backend server -->
+    <!-- Specific domain configuration for badge API server -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">54.165.122.247</domain>
+    </domain-config>
+
+    <!-- Specific domain configuration for workers API server -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">54.90.79.52</domain>
     </domain-config>
 </network-security-config>

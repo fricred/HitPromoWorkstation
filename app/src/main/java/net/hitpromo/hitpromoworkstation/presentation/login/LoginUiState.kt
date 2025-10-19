@@ -19,6 +19,12 @@ data class LoginUiState(
     val isReadyToScan: Boolean = false,
     val scannedBadgeId: String? = null,
 
+    // Form fields for two-step authentication
+    val badgeId: String = "",
+    val machineId: String = "",
+    val isWorkersLoginInProgress: Boolean = false,
+    val sessionId: String? = null,
+
     // Scanner state
     val scannerStatus: ScannerStatus = ScannerStatus.Initializing,
     val scannerName: String? = null,
